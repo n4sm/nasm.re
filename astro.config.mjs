@@ -26,8 +26,7 @@ import { pluginCustomCopyButton } from "./src/plugins/expressive-code/custom-cop
 
 // https://astro.build/config
 export default defineConfig({
-	site: "https://fuwari.vercel.app/",
-	base: "/",
+	site: "https://n4sm.github.io/",
 	trailingSlash: "always",
 	integrations: [
 		tailwind({
@@ -156,6 +155,7 @@ export default defineConfig({
 	vite: {
 		build: {
 			rollupOptions: {
+				//external: ['fsevents'],
 				onwarn(warning, warn) {
 					// temporarily suppress this warning
 					if (
