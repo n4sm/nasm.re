@@ -9,7 +9,7 @@ draft: True
 # Introduction
 
 The NetBSD `opencrypto` framework provides a standardized interface for kernel-level cryptographic operations, allowing userspace applications to leverage hardware acceleration.
-This post breaks down three distinct vulnerabilities discovered in the `ioctl` handling of the crypto operations in `/dev/crypto` reachable from an unpriviledged user. These vulnerabilities were discovered through fuzzing with Syzkaller. These bugs were assigned: CVE-2026-32848 (Session lifecycle race condition → UAF / double-free) and CVE-2026-32849 (Integer handling flaw → NULL pointer dereference).
+This post breaks down three distinct vulnerabilities discovered in the `ioctl` handling of the crypto operations in `/dev/crypto` reachable from an unpriviledged user. These vulnerabilities were discovered through fuzzing with Syzkaller. These bugs were assigned: CVE-2026-32848 (Session lifecycle race condition → UAF / double-free) and CVE-2026-32849 (Integer handling flaw → NULL pointer dereference). This post is not realeased yet because these bugs are under coordinated disclosure.
 
 ### UAF, Double-Free, and NULL Dereference
 
