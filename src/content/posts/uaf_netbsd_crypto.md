@@ -498,3 +498,7 @@ That's the first exploitation idea I had but the race is a little bit tricky. A 
 ```
 
 This will reliably lead to a double free with a very flexible size range (from 1 to 256*1024-4 bytes), from there we just need to find interesting objects to spray and to corrupt to achieve a clean privilege escalation. But I will explore this in another blogpost!
+
+> Cet objet d’expérience [Erfahrungsmäßige] est la décision et l’acte [der Entschluß und die That] qui s’étendent au-delà du monde; car tout ce qui est susceptible d’expérience provient seulement de la décision et de l’acte. Ils sont la fondation dernière de toutes choses [die lezte Begrün-dung von allem].
+
+(Schelling 1827/28, 75)
