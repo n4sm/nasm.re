@@ -11,7 +11,7 @@ The binary can be found [right here](https://github.com/ret2school/ctf/blob/mast
 
 ## [UnionCTF] Babyrarf
 
-Welcome guys, 
+Welcome guys,
 
 This Write-Up is about de first pwn challenge of [unionctf](https://ctf.cr0wn.uk): [babyrarf]().
 It was a really easy challenge with a stack based buffer overflow. The source code was provided so, no need to reverse the binary :).
