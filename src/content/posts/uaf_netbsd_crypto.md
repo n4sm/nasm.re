@@ -3,7 +3,7 @@ title: "[Netbsd - cryptodev] One integer overflow and plenty of UAF"
 tags: ["vr", "vulnerability research", "netbsd", "uaf", "nasm", "pwn", "linux", "kernel", "kernel exploitation", "cryptodev"]
 published: 2026-02-06
 category: "research"
-draft: False
+draft: True
 ---
 
 # Introduction
