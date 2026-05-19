@@ -9,7 +9,7 @@ draft: False
 # Introduction
 
 The NetBSD `opencrypto` framework provides a standardized interface for kernel-level cryptographic operations, allowing userspace applications to leverage hardware acceleration.
-This post breaks down three distinct vulnerabilities discovered in the `ioctl` handling of the crypto operations in `/dev/crypto` reachable from an unpriviledged user. These vulnerabilities were discovered through fuzzing with Syzkaller. These bugs were assigned: CVE-2026-32848 (Session lifecycle race condition → UAF / double-free) and CVE-2026-32849 (Integer handling flaw → NULL pointer dereference).
+This post breaks down three distinct vulnerabilities discovered in the `ioctl` handling of the crypto operations in `/dev/crypto` reachable from an unpriviledged user. These vulnerabilities were discovered through fuzzing with Syzkaller. These bugs were assigned: [CVE-2026-32848](https://www.cve.org/CVERecord?id=CVE-2026-32848) and [CVE-2026-32849](https://www.cve.org/CVERecord?id=CVE-2026-32849). These bugs have been patched in [ec8451efc1565516aba9e7047e1a1a1ce7953a2f](https://github.com/NetBSD/src/commit/ec8451efc1565516aba9e7047e1a1a1ce7953a2f).
 
 ### UAF, Double-Free, and NULL Dereference
 
@@ -473,7 +473,3 @@ That's the first exploitation idea I had but the race is a little bit tricky. A 
 ```
 
 This will reliably lead to a double free with a very flexible size range (from 1 to 256*1024-4 bytes), from there we just need to find interesting objects to spray and to corrupt to achieve a clean privilege escalation. But I will explore this in another blogpost!
-
-> Cet objet d’expérience [Erfahrungsmäßige] est la décision et l’acte [der Entschluß und die That] qui s’étendent au-delà du monde; car tout ce qui est susceptible d’expérience provient seulement de la décision et de l’acte. Ils sont la fondation dernière de toutes choses [die lezte Begrün-dung von allem].
-
-(Schelling 1827/28, 75)
