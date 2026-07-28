@@ -1,6 +1,5 @@
 ---
-import "@fontsource-variable/jetbrains-mono";
-import "@fontsource-variable/jetbrains-mono/wght-italic.css";
+import "highlight.js/styles/atom-one-dark.css";
 
 interface Props {
 	class: string;
@@ -14,16 +13,49 @@ const className = Astro.props.class;
 </div>
 
 <script>
+function enhanceCodeBlocks() {
+    document.querySelectorAll<HTMLPreElement>(".custom-md pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) {
+            return;
+        }
+
+        if (!pre.querySelector(".line-numbers")) {
+            const source = code.textContent?.replace(/\n$/, "") ?? "";
+            const lineCount = Math.max(1, source.split("\n").length);
+            const gutter = document.createElement("div");
+            gutter.className = "line-numbers";
+            gutter.setAttribute("aria-hidden", "true");
+
+            for (let line = 1; line <= lineCount; line++) {
+                const number = document.createElement("span");
+                number.textContent = line.toString();
+                gutter.append(number);
+            }
+
+            pre.classList.add("has-line-numbers");
+            pre.prepend(gutter);
+        }
+
+        if (!pre.querySelector(".copy-btn")) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "copy-btn";
+            button.setAttribute("aria-label", "Copy code");
+            button.textContent = "Copy";
+            pre.append(button);
+        }
+    });
+}
+
+enhanceCodeBlocks();
+
 document.addEventListener("click", function (e: MouseEvent) {
-    const target = e.target as Element | null;
-    if (target && target.classList.contains("copy-btn")) {
+    const target = (e.target as Element | null)?.closest<HTMLButtonElement>(".copy-btn");
+    if (target) {
         const preEle = target.closest("pre");
         const codeEle = preEle?.querySelector("code");
-        const code = Array.from(codeEle?.querySelectorAll(".code:not(summary *)") ?? [])
-            .map(el => el.textContent)
-            .map(t => t === "\n" ? "" : t)
-            .join("\n");
-        navigator.clipboard.writeText(code);
+        navigator.clipboard.writeText(codeEle?.textContent ?? "");
 
         const timeoutId = target.getAttribute("data-timeout-id");
         if (timeoutId) {
@@ -31,13 +63,16 @@ document.addEventListener("click", function (e: MouseEvent) {
         }
 
         target.classList.add("success");
+        target.textContent = "Copied";
 
-        // 设置新的timeout并保存ID到按钮的自定义属性中
         const newTimeoutId = setTimeout(() => {
             target.classList.remove("success");
+            target.textContent = "Copy";
         }, 1000);
 
         target.setAttribute("data-timeout-id", newTimeoutId.toString());
     }
 });
+
+document.addEventListener("astro:after-swap", enhanceCodeBlocks);
 </script>
