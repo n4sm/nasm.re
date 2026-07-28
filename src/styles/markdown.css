@@ -1,4 +1,11 @@
 .custom-md {
+    --hljs-background: #282c34;
+    --hljs-gutter-color: #5c6370;
+    --hljs-divider-color: rgb(255 255 255 / 10%);
+    --hljs-copy-color: rgb(255 255 255 / 70%);
+    --hljs-copy-border: rgb(255 255 255 / 12%);
+    --hljs-copy-background: var(--codeblock-topbar-bg);
+
     h1 {
         @apply text-3xl;
     }
@@ -54,7 +61,7 @@
         margin: 1rem 0;
         overflow: auto;
         border-radius: 0.75rem;
-        background: #282c34;
+        background: var(--hljs-background);
     }
 
     pre > code,
@@ -81,9 +88,9 @@
         top: 1rem;
         left: 0;
         width: 3rem;
-        border-right: 1px solid rgb(255 255 255 / 10%);
-        color: #5c6370;
-        background: #282c34;
+        border-right: 1px solid var(--hljs-divider-color);
+        color: var(--hljs-gutter-color);
+        background: var(--hljs-background);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         font-size: 0.875rem;
         line-height: 1.5rem;
@@ -103,10 +110,10 @@
         top: 0.65rem;
         right: 0.65rem;
         padding: 0.3rem 0.6rem;
-        border: 1px solid rgb(255 255 255 / 12%);
+        border: 1px solid var(--hljs-copy-border);
         border-radius: 0.4rem;
-        color: rgb(255 255 255 / 70%);
-        background: var(--codeblock-topbar-bg);
+        color: var(--hljs-copy-color);
+        background: var(--hljs-copy-background);
         font: 500 0.75rem/1.25rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         cursor: pointer;
         opacity: 0;
@@ -160,4 +167,80 @@
         margin: 1em 0;
     }
     
+}
+
+html:not(.dark) .custom-md {
+    --hljs-background: #fafafa;
+    --hljs-gutter-color: #a0a1a7;
+    --hljs-divider-color: rgb(56 58 66 / 12%);
+    --hljs-copy-color: #686b77;
+    --hljs-copy-border: rgb(56 58 66 / 14%);
+    --hljs-copy-background: #eeeeef;
+}
+
+html:not(.dark) .custom-md .hljs {
+    color: #383a42;
+    background: #fafafa;
+}
+
+html:not(.dark) .custom-md .hljs-comment,
+html:not(.dark) .custom-md .hljs-quote {
+    color: #a0a1a7;
+}
+
+html:not(.dark) .custom-md .hljs-doctag,
+html:not(.dark) .custom-md .hljs-keyword,
+html:not(.dark) .custom-md .hljs-formula {
+    color: #a626a4;
+}
+
+html:not(.dark) .custom-md .hljs-section,
+html:not(.dark) .custom-md .hljs-name,
+html:not(.dark) .custom-md .hljs-selector-tag,
+html:not(.dark) .custom-md .hljs-deletion,
+html:not(.dark) .custom-md .hljs-subst {
+    color: #e45649;
+}
+
+html:not(.dark) .custom-md .hljs-literal {
+    color: #0184bb;
+}
+
+html:not(.dark) .custom-md .hljs-string,
+html:not(.dark) .custom-md .hljs-regexp,
+html:not(.dark) .custom-md .hljs-addition,
+html:not(.dark) .custom-md .hljs-attribute,
+html:not(.dark) .custom-md .hljs-meta .hljs-string {
+    color: #50a14f;
+}
+
+html:not(.dark) .custom-md .hljs-attr,
+html:not(.dark) .custom-md .hljs-variable,
+html:not(.dark) .custom-md .hljs-template-variable,
+html:not(.dark) .custom-md .hljs-type,
+html:not(.dark) .custom-md .hljs-selector-class,
+html:not(.dark) .custom-md .hljs-selector-attr,
+html:not(.dark) .custom-md .hljs-selector-pseudo,
+html:not(.dark) .custom-md .hljs-number {
+    color: #986801;
+}
+
+html:not(.dark) .custom-md .hljs-symbol,
+html:not(.dark) .custom-md .hljs-bullet,
+html:not(.dark) .custom-md .hljs-link,
+html:not(.dark) .custom-md .hljs-meta,
+html:not(.dark) .custom-md .hljs-selector-id,
+html:not(.dark) .custom-md .hljs-title {
+    color: #4078f2;
+}
+
+html:not(.dark) .custom-md .hljs-built_in,
+html:not(.dark) .custom-md .hljs-title.class_,
+html:not(.dark) .custom-md .hljs-class .hljs-title {
+    color: #c18401;
+}
+
+html:not(.dark) .custom-md .copy-btn:hover {
+    color: #383a42;
+    background: rgb(56 58 66 / 8%);
 }
