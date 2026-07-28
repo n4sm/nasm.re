@@ -132,6 +132,11 @@ const bannerOffset =
 			const hue = localStorage.getItem('hue') || configHue;
 			document.documentElement.style.setProperty('--hue', hue);
 
+			// Apply the saved layout before paint to avoid a visible layout shift.
+			if (localStorage.getItem('layout-mode') === 'minimal') {
+				document.documentElement.classList.add('layout-minimal');
+			}
+
 			// calculate the --banner-height-extend, which needs to be a multiple of 4 to avoid blurry text
 			let offset = Math.floor(window.innerHeight * (BANNER_HEIGHT_EXTEND / 100));
 			offset = offset - offset % 4;
@@ -190,6 +195,82 @@ const bannerOffset =
 	}
 	.navbar-hidden {
 		@apply opacity-0 -translate-y-16
+	}
+}
+
+/* Optional distraction-free layout. Kept as an html class so it survives Swup
+   page transitions and can be applied before the first paint. */
+html.layout-minimal {
+	--page-width: 96rem !important;
+	--page-bg: var(--card-bg);
+	--radius-large: 0.35rem;
+}
+
+html.layout-minimal #sidebar,
+html.layout-minimal #toc-wrapper,
+html.layout-minimal #banner-wrapper,
+html.layout-minimal #banner-credit {
+	display: none !important;
+}
+
+html.layout-minimal #main-grid {
+	display: block;
+	max-width: 96rem;
+	transform: none !important;
+	padding-left: clamp(1rem, 3vw, 3rem);
+	padding-right: clamp(1rem, 3vw, 3rem);
+}
+
+html.layout-minimal #swup-container {
+	width: 100%;
+	overflow: visible;
+}
+
+html.layout-minimal #top-row {
+	height: auto !important;
+	max-width: 96rem;
+	padding-left: clamp(0rem, 2vw, 2rem);
+	padding-right: clamp(0rem, 2vw, 2rem);
+}
+
+html.layout-minimal #navbar > div:last-child {
+	max-width: 96rem;
+	border-bottom: 1px solid var(--line-divider);
+	border-radius: 0 !important;
+	background: var(--card-bg);
+	box-shadow: none;
+}
+
+html.layout-minimal #content-wrapper .card-base {
+	border-radius: 0.35rem;
+	box-shadow: none;
+}
+
+html.layout-minimal .post-card {
+	border-bottom: 1px solid var(--line-divider);
+	background: transparent;
+}
+
+html.layout-minimal .post-card-content {
+	width: 100% !important;
+	padding-left: clamp(0.25rem, 2vw, 1.5rem);
+	padding-right: clamp(0.25rem, 2vw, 1.5rem);
+}
+
+html.layout-minimal .post-card-cover,
+html.layout-minimal .post-card-enter {
+	display: none !important;
+}
+
+html.layout-minimal .footer {
+	border-top: 1px solid var(--line-divider);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html.layout-minimal #main-grid,
+	html.layout-minimal #top-row,
+	html.layout-minimal #navbar > div:last-child {
+		transition: max-width 300ms ease, padding 300ms ease, border-radius 300ms ease;
 	}
 }
 </style>
