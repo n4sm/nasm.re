@@ -129,7 +129,7 @@ int exec()
 ```
 
 Which gives us:
-```
+```bash
 nasm@off:~/ctf/bzhCTF/pwn$ ./FTM
 Vous n'êtes pas connecté (anonyme)
 1. Modifier les paramètres de connexion

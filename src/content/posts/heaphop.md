@@ -34,7 +34,7 @@ Heap-hop is a heap exploitation challenge I did during the [pwnme CTF](https://p
 
 ## What we have
 
-```
+```bash
 $ checksec --file ./heap-hop
 [*] '/media/nasm/7044d811-e1cd-4997-97d5-c08072ce9497/ret2school/ctf/2023/pwnme/pwn/heap/heap-hop'
     Arch:     amd64-64-little
@@ -425,7 +425,7 @@ io.interactive()
 ```
 
 Which gives:
-```
+```bash
 nasm@off:~/Documents/pwn/pwnme/heap$ python3 exploit.py REMOTE HOST=51.254.39.184 PORT=1336
 [*] '/home/nasm/Documents/pwn/pwnme/heap/heap-hop'
     Arch:     amd64-64-little

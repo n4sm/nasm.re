@@ -23,7 +23,7 @@ catastrophe is a heap challenge I did during the diceCTF 2022. I did have a lot 
 # What we have
 
 catastrophe is a classic heap challenge here are the classic informations about it:
-```
+```bash
 $ ./libc.so.6 
 GNU C Library (Ubuntu GLIBC 2.35-0ubuntu3) stable release version 2.35.
 Copyright (C) 2022 Free Software Foundation, Inc.

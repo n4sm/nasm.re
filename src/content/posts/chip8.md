@@ -23,7 +23,7 @@ chip8 is a emulator-pwn challenge I did during the [pwnme CTF](https://pwnme.fr/
 ## Code review
 
 This challenge is based on an emulator called [c8emu](https://github.com/LakshyAAAgrawal/chip8emu) that is updated with these lines of code:
-```
+```bash
 diff --git a/include/Machine.hpp b/include/Machine.hpp
 index af3d0d7..4288e15 100644
 --- a/include/Machine.hpp
@@ -144,7 +144,7 @@ code = [
 ```
 
 We read the flag from `memory[0x1010]` given `memory` is adjacent to the `flag` (`memory[0x1000]` == begin of the chunk `flag` within the heap), and we add `0x10` to read the chunk content which is right after the header (prev_sz and chunk_sz). Once we launch it we get:
-```
+```bash
 python3 exploit.py REMOTE HOST=51.254.39.184 PORT=1337
 [*] '/media/nasm/7044d811-e1cd-4997-97d5-c08072ce9497/ret2school/ctf/2023/pwnme/pwn/chip8/wrapper'
     Arch:     amd64-64-little
@@ -160,7 +160,7 @@ python3 exploit.py REMOTE HOST=51.254.39.184 PORT=1337
 ```
 
 If we decode chars by hand (each byte is a line for which white is 1 and black zero), we get:
-```
+```bash
 ╔════════════════════════════════════════════════════════════════╗
 ║ █ █ ▄▄▄                                                        ║PW
 ║ █  ██▀▄                                                        ║NM

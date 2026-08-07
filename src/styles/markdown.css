@@ -1,5 +1,5 @@
 .custom-md {
-    --hljs-background: #282c34;
+    --hljs-background: var(--codeblock-bg);
     --hljs-gutter-color: #5c6370;
     --hljs-divider-color: rgb(255 255 255 / 10%);
     --hljs-copy-color: rgb(255 255 255 / 70%);
@@ -170,17 +170,20 @@
 }
 
 html:not(.dark) .custom-md {
-    --hljs-background: #fafafa;
     --hljs-gutter-color: #a0a1a7;
     --hljs-divider-color: rgb(56 58 66 / 12%);
     --hljs-copy-color: #686b77;
     --hljs-copy-border: rgb(56 58 66 / 14%);
-    --hljs-copy-background: #eeeeef;
+}
+
+html:not(.dark) .custom-md pre:has(> code),
+html:not(.dark) .custom-md pre > code,
+html:not(.dark) .custom-md pre > code.hljs {
+    background: var(--codeblock-bg);
 }
 
 html:not(.dark) .custom-md .hljs {
     color: #383a42;
-    background: #fafafa;
 }
 
 html:not(.dark) .custom-md .hljs-comment,

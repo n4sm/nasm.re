@@ -367,7 +367,7 @@ Depending on your hardware, it might be needed to set `kern.cryptodevallowsoft=0
 So basically: this should not be an issue on system running on real hardware but we need to modify it if we run netbsd in qemu.  
 
 Here is my environment but the bugs shown above should be reproducible on any Netbsd kernel until a193196bb9d88f0ce1ecaffdaf07fb69ff1de448.
-```
+```bash
 syssec@Syssec:~/netbsd/src$ git diff sys/arch/amd64/conf/GENERIC
 diff --git a/sys/arch/amd64/conf/GENERIC b/sys/arch/amd64/conf/GENERIC
 index 0fedb047c3e0..a9d86a097a76 100644

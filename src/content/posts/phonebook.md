@@ -12,7 +12,7 @@ phonebook is a basic heap challenge I did during the dctf event. It's basically 
 
 ## The bug
 
-```
+```bash
 $ ./phonebook
 Choose an option: [1-5]
 1. Store someone's information
@@ -78,7 +78,7 @@ We can give it a new lentgh and if that's not equal to the current size field it
 Now we're able to overflow through the name pointer we have to find how the leak the libc, a nice way would be to leak it by using free'd chunks in the unsortedbin. Or we can leak the `entity->func` function pointer which would give us a leak of the binary base address, then we would have to edit the name pointer with the got entry of `puts` to leak its address within the libc.
 
 To do so we can create another entity right after the name pointer:
-```
+```bash
 0x559b0d4d16b0	0x0000000000000000	0x0000000000000031	........1.......
 0x559b0d4d16c0	0x3131313131313131	0x0000559b0c84f2a1	11111111.....U..
 0x559b0d4d16d0	0x0000559b0d4d1800	0x00000000000000fe	..M..U..........
@@ -124,7 +124,7 @@ To summarise:
 ## PROFIT
 
 Then we just have to overwrite the function pointer with the address of `system` which takes as first argument a pointer to the entity structure of edit the phone number of the entity we wanna use because that's the first field of the structure which means we make it equivalent to a `system("/bin/sh")`.
-```
+```bash
 00000000 entity          struc ; (sizeof=0x20, mappedto_8)
 00000000 num             dq ?
 00000008 func            dq ?
@@ -134,7 +134,7 @@ Then we just have to overwrite the function pointer with the address of `system`
 ```
 
 Then here we are:
-```
+```bash
 $ python3 exploit.py REMOTE HOST=51.124.222.205 PORT=13380
 [*] '/home/nasm/Documents/phonebook/chall/phonebook_patched_patched'
     Arch:     amd64-64-little

@@ -21,7 +21,7 @@ The `flag` is located right next to the hypervisor. Go get it!
 
 We got several files:
 
-```
+```bash
 $ ls
 build_qemu.sh  diff_chall.txt  flag  initramfs.cpio.gz  qemu-system-x86_64  run_chall.sh  vmlinuz-5.11.0-38-generic
 ```
@@ -262,7 +262,7 @@ To write these registers from userland, we need to `mmap` the right `resource` f
 
 The resource file can be found by getting a shell on the machine to take a look at the output of the `lspci` command.
 
-```
+```bash
 / # lspci -v
 00:01.0 Class 0601: 8086:7000
 00:00.0 Class 0600: 8086:1237
@@ -273,7 +273,7 @@ The resource file can be found by getting a shell on the machine to take a look 
 
 The output of the command is structured like this:
 
-```
+```bash
 Field 1 : 00:02.0 : bus number (00), device number (02) and function (0)
 Field 2 : 00ff    : device class
 Field 3 : 1337    : vendor ID
@@ -417,7 +417,7 @@ According to the environment, scan the heap memory is not reliable at all. I suc
 
 To see where we can find pointers to the rwx memory area, we can make use of the `search` command in `pwndbg`:
 
-```
+```bash
 pwndbg> vmmap                                                                                                                                                                              
 LEGEND: STACK | HEAP | CODE | DATA | RWX | RODATA                                                                                                                                            
     0x559a884e1000     0x559a88791000 r--p   2b0000 0      /home/nasm/r2s/ctf/2021/hack.lu/pwn/cloudinspect/qemu-system-x86_64                                                                 
@@ -612,4 +612,3 @@ You can the final exploit [here](https://github.com/ret2school/ctf/blob/master/2
 - [Interesting article about PCI devices](https://tldp.org/LDP/tlk/dd/pci.html)
 - [Linux kernel PCI documentation](https://www.kernel.org/doc/Documentation/filesystems/sysfs-pci.txt)
 - [Linux kernel pagemap documentation](https://www.kernel.org/doc/Documentation/vm/pagemap.txt)
-

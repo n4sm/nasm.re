@@ -169,7 +169,7 @@ Timestamp: t=1636749762, hash: 88c71c0cc0950acfe3835a009f8931cee0f12ab7410538f96
 
 Now we know the final hash to which the hash of the pin is compared to, we can just run a mask attack using hashcat with a mask of 8 hexadecimal characters in uppercase (we tried for every length up to the right size: 8).
 
-```
+```bash
 $ hashcat -a 3 -m 1400 pincode.hash ?H?H?H?H?H?H?H?H
 [skip]
 88c71c0cc0950acfe3835a009f8931cee0f12ab7410538f96d058184a4c90e11:4233246D

@@ -176,7 +176,7 @@ The source code is quite readable, the vulnerability is the overflow within the 
 The [zig](https://github.com/ziglang/zig/) source is quite readable so let's take a look at the internals of the GeneralPurposeAllocator allocator.
 The GeneralPurposeAllocator is implemented [here](https://github.com/ziglang/zig/blob/master/lib/std/heap/general_purpose_allocator.zig).
 The header of the source code file gives the basic design of the allocator:
-```
+```bash
 //! ## Basic Design:
 //!
 //! Small allocations are divided into buckets:
@@ -392,7 +392,7 @@ pwn.log.info(f"stack: {hex(stack)}")
 Now we're able to overwrite whatever function's stackframe, we have to find one that returns from context of `std.fs.file.File.read` that reads the user input to the chunk. But unlucky functions like `add`, `edit` are inlined in the `main` function. Moreover we cannot overwrite the return address of the `main` function given that the exit handler call directly exit. Which means we have to corrput the stackframe of the `std.fs.file.File.read` function called in the `edit` function.
 But the issue is that between the call to `SYS_read` within `std.fs.file.File.read` and the end of the function, variables that belong to the calling function's stackframe are edited, corrupting the ROPchain. So what I did is using this gadget to reach a part of the stack that will not be corrupted:
 
-```
+```bash
 0x0000000000203715 : add rsp, 0x68 ; pop rbx ; pop r14 ; ret
 ```
 
@@ -438,7 +438,7 @@ io.interactive()
 
 ## PROFIT
 
-```
+```bash
 nasm@off:~/Documents/pwn/corCTF/zieg$ python3 remote.py REMOTE HOST=be.ax PORT=31278
 [*] '/home/nasm/Documents/pwn/corCTF/zieg/zigzag'
     Arch:     amd64-64-little

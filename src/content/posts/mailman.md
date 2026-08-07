@@ -34,7 +34,7 @@ mailman is a heap challenge I did for the [ImaginaryCTF 2023](https://2023.imagi
 ## Code review
 
 First let's take at the version of the libc and at the protections inabled onto the binary.
-```
+```bash
 $ checksec --file vuln 
 [*] '/home/alexis/Documents/pwn/ImaginaryCTF/mailman/vuln'
     Arch:     amd64-64-little
@@ -306,7 +306,7 @@ io.interactive()
 ```
 
 Which gives:
-```
+```py
 $ python3 exploit.py REMOTE HOST=mailman.chal.imaginaryctf.org PORT=1337
 [*] '/home/nasm/Documents/pwn/ImaginaryCTF/mailman/vuln'
     Arch:     amd64-64-little

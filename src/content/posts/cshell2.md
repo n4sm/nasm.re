@@ -24,7 +24,7 @@ If you begin with heap challenges, I advice you to read [previous heap writeup](
 ## Reverse Engineering
 
 Let's take a look at the provided binary and libc:
-```
+```bash
 $ ./libc.so.6 
 GNU C Library (GNU libc) development release version 2.36.9000.
 Copyright (C) 2022 Free Software Foundation, Inc.
@@ -402,7 +402,7 @@ io.interactive()
 ```
 
 Here we are:
-```
+```bash
 nasm@off:~/Documents/pwn/corCTF/cshell2$ python3 exploit.py REMOTE HOST=be.ax PORT=31667
 [*] '/home/nasm/Documents/pwn/corCTF/cshell2/cshell2'
     Arch:     amd64-64-little

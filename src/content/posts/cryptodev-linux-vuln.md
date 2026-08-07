@@ -376,7 +376,7 @@ for (size_t i = 3; i < 10485 + 3; i++)
 If we failed to spray correctly the `struct file`, nothing stops us to try it again, and again. Which makes the exploit pretty stable!
 
 Which gives:
-```
+```bash
 nasm@syzkaller:~$ ./poc 
 [*] Increasing file descriptor limit...
 [*] Triggered the bug...
@@ -402,12 +402,12 @@ You can find the final exploit code [here](https://gist.github.com/n4sm/0fd2479e
 I used the following kernel options to compile my kernel:
 `make defconfig && make kvm_guest.config && ./scripts/config -e CONFIG_DEBUG_INFO_DWARF4 -e CONFIG_CONFIGFS_FS && make olddefconfig`
 You can download the kernel source from https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.15.4.tar.gz:
-```
+```bash
 6bfb8a8d4b33ddbec44d78789e0988a78f5f5db1df0b3c98e4543ef7a5b15b97  linux-6.15.4.tar.gz
 ```
 
 I used the following qemu options:
-```
+```bash
 qemu-system-x86_64 \
 	-m 2G \
 	-smp 2 \
