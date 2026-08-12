@@ -3,7 +3,7 @@ title: "VirtualBox fuzzing - improvements"
 published: 2025-11-01
 tags: ["nasm", "pwn", "fuzzing", "VBox", "hypervisor", "VirtualBox"]
 category: "research"
-draft: False
+draft: True
 ---
 
 # Introduction

@@ -14,7 +14,7 @@ In november 2025 I started a fuzzing campaign against [cryptodev-linux](https://
 For a little bit of background, according to their github page:
 > This is a /dev/crypto device driver, equivalent to those in OpenBSD or FreeBSD. The main idea is to access existing ciphers in kernel space from userspace, thus enabling the re-use of a hardware implementation of a cipher.
 
-Cryptodev-linux is not widely used today, but it was popular when the native kernel crypto (socket) API was slower. Nowadays it is supported and included in various frameworks and projects such as:  [dpdk](https://doc.dpdk.org/guides-25.03/prog_guide/cryptodev_lib.html), [OpenEmbedded](https://layers.openembedded.org/layerindex/recipe/24849/) and [kobol NAS](https://wiki.kobol.io/helios4/cesa/#install-cryptodev).
+Cryptodev-linux is not widely used nowadays, but it was popular when the native kernel crypto (socket) API was slower. Nowadays it is supported and included in various frameworks and projects such as:  [dpdk](https://doc.dpdk.org/guides-25.03/prog_guide/cryptodev_lib.html), [OpenEmbedded](https://layers.openembedded.org/layerindex/recipe/24849/) and [kobol NAS](https://wiki.kobol.io/helios4/cesa/#install-cryptodev).
 
 # Basic design
 

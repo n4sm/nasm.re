@@ -1,5 +1,5 @@
 ---
-title: "[Netbsd - cryptodev] One integer overflow and plenty of UAF"
+title: "[Netbsd - cryptodev] CVE-2026-32848 and CVE-2026-32849"
 tags: ["vr", "vulnerability research", "netbsd", "uaf", "nasm", "pwn", "linux", "kernel", "kernel exploitation", "cryptodev"]
 published: 2026-02-06
 category: "research"
@@ -22,17 +22,6 @@ The vulnerabilities found in `cryptof_ioctl` and `cryptodev_op` highlight a fund
 * **Integer overflow (leading to CWE-476):** A logic error in `cryptodev_op` allows a user-controlled unsigned value to overflow a signed integer. This causes the kernel to bypass critical memory allocations while continuing with data copies, resulting in a **NULL Pointer Dereference** and a kernel panic.
 
 # Race Condition in `cryptof_ioctl` / `cryptodev_op`: Use-After-Free & Double-Free
-
-## Affected Component
-
-| Field | Value |
-|---|---|
-| **File** | `sys/opencrypto/cryptodev.c` |
-| **Functions** | `cryptof_ioctl()` (`CIOCCRYPT`, `CIOCFSESSION`), `cryptodev_op()` |
-| **Type** | CWE-416: Use-After-Free / CWE-415: Double-Free |
-| **Impact** | Kernel panic, heap corruption primitive |
-
-## CIOCCRYPT/CIOCFSESSION Session Lifetime Race
 
 `CIOCCRYPT` drops `cryptodev_mtx` after `csefind` but before `cryptodev_op` completes. A concurrent `CIOCFSESSION` (or `cryptof_close`) on another thread can call `csedelete` + `csefree` on the same session in this window, causing `cryptodev_op` to operate on a freed `cse`.
 ```c
@@ -220,15 +209,6 @@ main(void)
 ```
 # NULL Pointer Dereference in cryptodev_op
 
-| Field | Value |
-|---|---|
-| **File** | `sys/opencrypto/cryptodev.c` |
-| **Function** | `cryptodev_op()` |
-| **Type** | CWE-190: Integer Overflow / CWE-476: NULL Pointer Dereference |
-| **Impact** | Kernel panic (DoS) |
-
-## Root Cause
-
 `iov_len` is declared as `int` (signed) but assigned from `cop->dst_len` which is `u_int` (unsigned). When `cop->dst_len > INT_MAX`.
 
 ```c
@@ -247,14 +227,6 @@ cse->uio.uio_resid = cse->uio.uio_iov[0].iov_len;
 /* iov_base = NULL -> fault */
 copyin(cop->src, cse->uio.uio_iov[0].iov_base, cop->len);
 ```
-
-## Trigger Conditions
-
-| Field | Value |
-|---|---|
-| **Session type** | Compression session (`CRYPTO_DEFLATE_COMP` or `CRYPTO_GZIP_COMP`) |
-| **`cop->dst_len`** | `> INT_MAX` (e.g. `0x80000001`) |
-| **`cop->dst_len`** | `> cop->len` to trigger the `iov_len` overwrite path |
 
 Proof-of-concept:
 ```c
@@ -351,14 +323,6 @@ main(void)
     return 0;
 }
 ```
-
-## Impact
-
-| Scenario | Description |
-|---|---|
-| **SVS enabled** | `copyin` faults on NULL `iov_base` — caught by `onfault` table — clean `EFAULT` returned to userspace, no panic. |
-| **SVS disabled (KASAN config)** | `copyin` may succeed into a mapped page at `0x0`. UIO machinery consumes the corrupted `uio_resid = 0xffffffff80000001` in pointer arithmetic, producing the non-canonical address `0xfffff9000000000`. This triggers a #GP fault which is *not* handled by the `copyin` `onfault`/`nofault` recovery table (which only covers page faults), resulting in an unrecoverable kernel panic. |
-
 
 # Environment
 
