@@ -69,6 +69,8 @@ It is worth noting that the IPA is actually very proactive when the AP is sendin
 
 # The findings
 
+## pktlen-overflow
+
 After spending some time reversing and building the fuzzer with unicornafl I ultimately came to two different findings within the same function: `rmnet_frag_command` (callstack: `rmnet_rx_handler` => `rmnet_frag_ingress_handler` => `rmnet_frag_command`). Here is a pseudo-code of the function:
 
 ```c
@@ -138,6 +140,8 @@ If you are familiar with vulnerability research the two bug should be straightfo
 ~~- The second bug is more specific to the threat model, because we are dealing with a DMA, the attacker might abuse the double fetch between `skb_put` / `_alloc_skb` and the `memcpy`, leading to an out-of-bounds write as well.~~ => doesn't work because IPA is not exposing the DMA directly, it is issuing already filled skbs. 
 
 *Final Outcome*: Well, the primitive would be so neat if we could just reach the memcpy and corrupt the heap memory but unfortunately the `skb_put` will very likely crash because `old_tail + len >  end` which will cause a BUG() and a crash...
+
+## coalesce-shinfo
 
 To trigger an actual out-of-bound write we need to find another path, that's why I started looking into the *coalescing* path in `_rmnet_map_ingress_handler`, especially `rmnet_map_process_next_hdr_packet`. The root-cause analysis is quite long so I will start from a given buggy input:
 ```
@@ -216,6 +220,10 @@ memcpy(skbn->data, ip, ip_len);
 ```
 
 The missing `doff >= 5` check in `rmnet_map_process_next_hdr_packet` and the zero segment length lets `__rmnet_map_segment_coal_skb` write TCP fields despite reserving zero TCP bytes which end up overwriting the `skb_shared_info` fields. In terms of flags requirements this code path requires `RMNET_FLAGS_INGRESS_COALESCE` or `RMNET_PRIV_FLAGS_INGRESS_MAP_CKSUMV5` and requires a linear skb (which is the default).
+
+## Exploitability
+
+Overwriting `skb_shared_info` is indeed an out-of-bounds write but realistically the kernel stack will just drop the packet and so far I don't think we can get interesting primitives out of these two bugs (which is very frustrating but it is what it is).
 
 # What's up from the public available source?
 
