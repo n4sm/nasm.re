@@ -1,5 +1,5 @@
 ---
-title: "Xiaomi 18 HyperOS - CP to AP oob-write in rmnet"
+title: "Xiaomi 18 HyperOS - CP-to-AP oob-write in rmnet"
 published: 2026-11-10
 tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
 category: "research"
@@ -9,7 +9,7 @@ description: Write-up about an out-of-bounds write I found in the rmnet device s
 
 Credit for the pic: [XilmO@夕末](https://www.pixiv.net/en/users/19389056).
 
-While researching baseband security, I became interested in CP-to-AP vulnerabilities, an attack surface that appears under-researched. This post focuses on Qualcomm’s [RMNET](https://docs.kernel.org/networking/device_drivers/cellular/qualcomm/rmnet.html) driver.
+While researching baseband security, I became interested in vulnerabilities affecting the Application Processor from the Communication Processor (the baseband, Modem Peripheral Subsystem ou Modem Processing SubSystem - MPSS for Qualcomm), an attack surface that appears under-researched. We call these bugs CP-to-AP vulnerabilities. This post focuses on Qualcomm’s [RMNET](https://docs.kernel.org/networking/device_drivers/cellular/qualcomm/rmnet.html) driver.
 
 > rmnet driver is used for supporting the Multiplexing and aggregation Protocol (MAP). This protocol is used by all recent chipsets using Qualcomm Technologies, Inc. modems.
 
@@ -28,7 +28,7 @@ I think this is a niche and interesting attack surface that is fairly easy to fu
 When looking for CP-to-AP vulnerabilities, the first step is to map the code paths in the target drivers that parse data delivered over DMA. I started with RMNET because it handles MAP, but SMEM, QRTR, and GLINK are other interesting interfaces.
 
 The firmware apparently links the rmnet device to the IPA driver (pure deduction based on the compiled modules I identified). The receive flow from the dma looks like this:
-`CP/AP DMA -> IPA RX path parses the DMA and issue a list of skb -> RMNET parses the skb`. So we end up in `rmnet_rx_handler` which will iter through the received skb containing MAP packets.
+`CP/AP DMA -> IP Accelerator (IPA) RX path parses the DMA and issue a skb -> RMNET parses the skb`. So we end up in `rmnet_rx_handler` which will iter through the received skb containing MAP packets.
 
 While reversing the module I ended up with this layout for `rmnet_map_header`.
 
@@ -64,6 +64,8 @@ To reach `rmnet_frag_command`, the port needs `RMNET_FLAGS_INGRESS_MAP_COMMANDS`
 ## Prior IPA parsing
 
 This is actually a tricky part which tricked me a lot because I was not used to this design in other baseband manufacturers. rmnet is not handling the DMA directly, it is receiving a skb from the IPA driver which is the one actually accessing the DMA, fortunately for us is does not perform a lot of sanity checks on the downlink (DL) map packets (the qmap packets sent from the baseband to the AP). That's why we can assume in the poc and in the fuzzer that the input from `rmnet_rx_handler` is mostly attacker controlled.
+
+It is worth noting that the IPA is actually very proactive when the AP is sending uplink / tx frames.
 
 # The findings
 
