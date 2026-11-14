@@ -22,7 +22,10 @@ RMNET parses MAP frames carried by skbs from the modem-facing network device bef
 - CP-to-AP bugs in rmnet found by fuzzing / code review
 - `pktlen` overflow in `rmnet_frag_command` is likely to lead to a DoS
 - int overflow in `__rmnet_map_segment_coal_skb` leading to an out-of-bound write in the adjacent `skb_shared_info` struct which leads to a silent corruption (I guess).
-- out-of-bounds 
+- cross object out-of-bounds write in `rmnet_alloc_skb` because of another in overflow but the bug will not run on a real device because it needs a `65KB` long skb delevered from the IPA driver.
+
+The disclosed bugs are not crazy but the attack surface is interesting, hope you'll enjoy reading it.
+
 
 # Introduction
 
