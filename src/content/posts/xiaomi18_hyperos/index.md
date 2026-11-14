@@ -129,7 +129,7 @@ void *rmnet_frag_command(struct rmnet_frag_descriptor *desc,
 }
 ```
 
-This function processes flow control commands, and if successful, builds and sends an ACK packet containing the original command payload.
+This function processes flow control commands, and if successful, builds and sends back to the modem an ACK packet containing the original command payload.
 
 In this threat model we assume the attacker can write arbitrary content into the DMA shared between the CP and the AP, it means here that we can control what is written over the `hdr` struct which is basically a `map_header`. 
 
