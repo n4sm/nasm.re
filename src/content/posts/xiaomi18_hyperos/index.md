@@ -63,7 +63,7 @@ To reach `rmnet_frag_command`, the port needs `RMNET_FLAGS_INGRESS_MAP_COMMANDS`
 
 ## Prior IPA parsing
 
-This is actually a tricky part which tricked me a lot because I was not used to this design in other baseband manufacturers. rmnet is not handling the DMA directly, it is receiving a list of skbs from the IPA driver which is the one actually accessing the DMA, fortunately for us is does not perform a lot of sanity checks on the downlink (DL) map packets (the qmap packets sent from the baseband to the AP). That's why we can assume in the poc and in the fuzzer that the input from `rmnet_rx_handler` is mostly attacker controlled.
+This is actually a tricky part which tricked me a lot because I was not used to this design in other baseband manufacturers. rmnet is not handling the DMA directly, it is receiving a skb from the IPA driver which is the one actually accessing the DMA, fortunately for us is does not perform a lot of sanity checks on the downlink (DL) map packets (the qmap packets sent from the baseband to the AP). That's why we can assume in the poc and in the fuzzer that the input from `rmnet_rx_handler` is mostly attacker controlled.
 
 # The findings
 
