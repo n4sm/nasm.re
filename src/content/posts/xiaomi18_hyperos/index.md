@@ -1,10 +1,10 @@
 ---
-title: "Xiaomi 18 HyperOS - Two CP to AP oob-write in rmnet"
+title: "Xiaomi 18 HyperOS - CP to AP oob-write in rmnet"
 published: 2026-11-10
 tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
 category: "research"
 image: ./xiaomi18_hyperos/main.jpg
-description: Write-up about two out-of-bounds write I found in the rmnet device shipped in the Xiaomi 18
+description: Write-up about an out-of-bounds write I found in the rmnet device shipped in the Xiaomi 18
 ---
 
 Credit for the pic: [XilmO@夕末](https://www.pixiv.net/en/users/19389056).
@@ -61,6 +61,10 @@ Most of the features of the driver depend on the existing port flags the device 
 
 To reach `rmnet_frag_command`, the port needs `RMNET_FLAGS_INGRESS_MAP_COMMANDS` (`0x02`). The WDA parsing path in this NICM build does not set that bit. It can be enabled by AP-side RMNET link configuration when a virtual device is created or changed. On the fragmented path, the downlink marker handler runs first when its flags are set, so `0x02` alone does not guarantee that `rmnet_frag_command` is called.
 
+## Prior IPA parsing
+
+This is actually a tricky part which tricked me a lot because I was not used to this design in other baseband manufacturers. rmnet is not handling the DMA directly, it is receiving a list of skbs from the IPA driver which is the one actually accessing the DMA, fortunately for us is does not perform a lot of sanity checks on the downlink (DL) map packets (the qmap packets sent from the baseband to the AP). That's why we can assume in the poc and in the fuzzer that the input from `rmnet_rx_handler` is mostly attacker controlled.
+
 # The findings
 
 After spending some time reversing and building the fuzzer with unicornafl I ultimately came to two different findings within the same function: `rmnet_frag_command` (callstack: `rmnet_rx_handler` => `rmnet_frag_ingress_handler` => `rmnet_frag_command`). Here is a pseudo-code of the function:
@@ -88,14 +92,6 @@ void *rmnet_frag_command(struct rmnet_frag_descriptor *desc,
 
     // cmd == 1 is FLOW_DISABLE, cmd == 2 is FLOW_ENABLE
     if (rmnet_vnd_do_flow_control(ep->vnd, (cmd == 2) ? 1 : 0) != 0 && cmd == FLOW_DISABLE)
-        goto out;
-
-    // 3. Allocate and build the ACK SKB
-    dev = port->dev;
-    pkt_len = __be32_to_cpu(hdr->pkt_len) >> 16;
-
-    skb = __alloc_skb(pkt_len + 64, GFP_ATOMIC, 0, NUMA_NO_NODE);
-    if (!skb)
         goto out;
 
     result = (void *)_alloc_skb(
@@ -133,9 +129,13 @@ This function processes flow control commands, and if successful, builds and sen
 
 In this threat model we assume the attacker can write arbitrary content into the DMA shared between the CP and the AP, it means here that we can control what is written over the `hdr` struct which is basically a `map_header`. 
 
-If you are familiar with vulnerability research the two bugs should be straightforward: 
-- `(unsigned __int16)((__builtin_bswap32(hdr->pkt_len) >> 16) + 64` might wrap around because of the u16 cast which will cause an fully attacker-controlled out-of-bounds write.
-- The second bug is more specific to the threat model, because we are dealing with a DMA, the attacker might abuse the double fetch between `skb_put` / `_alloc_skb` and the `memcpy`, leading to an out-of-bounds write as well.
+If you are familiar with vulnerability research the two bug should be straightforward: 
+
+- `(unsigned __int16)((__builtin_bswap32(hdr->pkt_len) >> 16) + 64` might wrap around because of the u16 cast which will cause an fully attacker-controlled out-of-bounds write... well, not exactly.
+
+~~- The second bug is more specific to the threat model, because we are dealing with a DMA, the attacker might abuse the double fetch between `skb_put` / `_alloc_skb` and the `memcpy`, leading to an out-of-bounds write as well.~~ => doesn't work because IPA is not exposing the DMA directly, it is issuing already filled skbs. 
+
+*Final Outcome*: Well, the primitive would be so neat if we could just reach the memcpy and corrupt the heap memory but unfortunately the `skb_put` will very likely crash because `old_tail + len >  end` which will cause a BUG() and a crash...
 
 # What's up from the public available source?
 
@@ -166,7 +166,7 @@ static void rmnet_frag_send_ack(struct rmnet_map_header *qmap,
 }
 ```
 
-And this function does not make any sense because it is emitting a skb of size zero (no `skb_push` here) without populating it. The `ndo_start_xmit` will forward the skb for the IPA or MHI driver (`ipa3_wwan_xmit` and `ipa3_send` / `mhi_ndo_xmit`, I am just guessing statically) which will just drop it because the skb is empty. So this design is rather weird but at least it does not contain the vulnerable code snippets. Maybe I am missing something here, if you know what it is feel free to dm me on discord (`@nasm`).
+Because the skb contains the content of the map command packets already (parsed by the IPA driver) the driver don't need to copy the content of the map commands again, it can just write the command which gets aknowledged and that's it (but I am not sure yet if somone more experienced could clarify that).
 
 # Emulation
 
