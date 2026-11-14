@@ -86,8 +86,8 @@ void *rmnet_frag_command(struct rmnet_frag_descriptor *desc,
 
 ...
 
-    // cmd == 2 is FLOW_START (val 1), cmd == 1 is FLOW_STOP (val 0)
-    if (rmnet_vnd_do_flow_control(ep->vnd, (cmd == 2) ? 1 : 0) != 0)
+    // cmd == 1 is FLOW_DISABLE, cmd == 2 is FLOW_ENABLE
+    if (rmnet_vnd_do_flow_control(ep->vnd, (cmd == 2) ? 1 : 0) != 0 && cmd == FLOW_DISABLE)
         goto out;
 
     // 3. Allocate and build the ACK SKB
@@ -110,7 +110,7 @@ void *rmnet_frag_command(struct rmnet_frag_descriptor *desc,
         *((_QWORD *)result + 28) += 32LL;
         *((_DWORD *)result + 52) = v10;
         skb_put(a1: result, a2: __builtin_bswap32(hdr->pkt_len) >> 16);
-        memcpy(dest: v9[28], src: v7, n: __builtin_bswap32(hdr->pkt_len) >> 16);
+        memcpy(dest: v9[28], src: hdr, n: __builtin_bswap32(hdr->pkt_len) >> 16);
         skb_push(a1: v9, a2: 4);
 
         // Mark packet as an outgoing MAP command ACK 
@@ -128,6 +128,8 @@ void *rmnet_frag_command(struct rmnet_frag_descriptor *desc,
     return skb;
 }
 ```
+
+This function processes flow control commands, and if successful, builds and sends an ACK packet containing the original command payload.
 
 In this threat model we assume the attacker can write arbitrary content into the DMA shared between the CP and the AP, it means here that we can control what is written over the `hdr` struct which is basically a `map_header`. 
 
