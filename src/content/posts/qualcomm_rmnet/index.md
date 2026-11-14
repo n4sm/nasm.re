@@ -223,7 +223,7 @@ skb_push(skb=0x80007000, len=4)
 consume_skb(skb=0x80005000)
 ```
 
-Full code of the poc: 
+Full code of the poc: [here](https://gist.github.com/n4sm/49468d9cfc2215b8d27b23c2fdda19f0).
 
 # Conclusion
 
