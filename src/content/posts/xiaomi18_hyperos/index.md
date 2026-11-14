@@ -3,7 +3,7 @@ title: "Xiaomi 18 HyperOS - Two CP to AP oob-write in rmnet"
 published: 2026-11-10
 tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
 category: "research"
-image: ./qualcomm_rmnet/main.jpg
+image: ./xiaomi18_hyperos/main.jpg
 description: Write-up for a few bugs I found in the rmnet_core.ko
 ---
 
