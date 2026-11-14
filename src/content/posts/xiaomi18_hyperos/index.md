@@ -4,7 +4,7 @@ published: 2026-11-10
 tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
 category: "research"
 image: ./xiaomi18_hyperos/main.jpg
-description: Write-up for a few bugs I found in the rmnet_core.ko
+description: Write-up about two out-of-bounds write I found in the rmnet device shipped in the Xiaomi 18
 ---
 
 Credit for the pic: [XilmO@夕末](https://www.pixiv.net/en/users/19389056).
