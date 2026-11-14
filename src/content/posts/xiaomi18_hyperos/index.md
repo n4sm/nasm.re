@@ -17,6 +17,13 @@ While researching baseband security, I became interested in vulnerabilities affe
 
 RMNET parses MAP frames carried by skbs from the modem-facing network device before passing IP payloads to the Linux network stack. Several MAP frames can be aggregated into one skb, including the nonlinear skbs handled by this vendor driver.
 
+# TL;DR
+
+- CP-to-AP bugs in rmnet found by fuzzing / code review
+- `pktlen` overflow in `rmnet_frag_command` is likely to lead to a DoS
+- int overflow in `__rmnet_map_segment_coal_skb` leading to an out-of-bound write in the adjacent `skb_shared_info` struct which leads to a silent corruption (I guess).
+- out-of-bounds 
+
 # Introduction
 
 The RMNET driver is open source, and you can find it in the Linux tree ([here](https://elixir.bootlin.com/linux/v7.3.1/source/drivers/net/ethernet/qualcomm/rmnet)). Phone vendors usually ship their own versions because of the chipsets they use (in our case, the `Qualcomm Snapdragon 8 Elite Gen 6`). Even though the drivers shipped on phones are not in-tree, their source code should be released under the GPL. That's why we can look at modified drivers, such as [this repository](https://github.com/zorn-trees/android_kernel_xiaomi_sm8650-modules/tree/lineage-23.2) for the `Qualcomm Snapdragon 8 Gen 3`. The only significant difference between that repository and the shipped modules is that we are running `OS4.0.27.0 HyperOS` rather than LineageOS.
@@ -61,7 +68,7 @@ Most of the features of the driver depend on the existing port flags the device 
 
 To reach `rmnet_frag_command`, the port needs `RMNET_FLAGS_INGRESS_MAP_COMMANDS` (`0x02`). The WDA parsing path in this NICM build does not set that bit. It can be enabled by AP-side RMNET link configuration when a virtual device is created or changed. On the fragmented path, the downlink marker handler runs first when its flags are set, so `0x02` alone does not guarantee that `rmnet_frag_command` is called.
 
-## Prior IPA parsing
+## Prior IP Accelerator (IPA) parsing
 
 This is actually a tricky part which tricked me a lot because I was not used to this design in other baseband manufacturers. rmnet is not handling the DMA directly, it is receiving a skb from the IPA driver which is the one actually accessing the DMA, fortunately for us is does not perform a lot of sanity checks on the downlink (DL) map packets (the qmap packets sent from the baseband to the AP). That's why we can assume in the poc and in the fuzzer that the input from `rmnet_rx_handler` is mostly attacker controlled.
 
@@ -143,7 +150,7 @@ If you are familiar with vulnerability research the two bug should be straightfo
 
 ## coalesce-shinfo
 
-To trigger an actual out-of-bound write we need to find another path, that's why I started looking into the *coalescing* path in `_rmnet_map_ingress_handler`, especially `rmnet_map_process_next_hdr_packet`. The root-cause analysis is quite long so I will start from a given buggy input:
+To trigger an actual out-of-bound write we need to find another path, that's why I started looking into the *coalescing* path in `_rmnet_map_ingress_handler`, especially `rmnet_map_process_next_hdr_packet` and `__rmnet_map_segment_coal_skb`. The root-cause analysis is quite long so I will start from a given buggy input:
 ```
  offset          bytes (hex)          field / meaning
  ------          -----------          ----------------------------------------
@@ -220,6 +227,16 @@ memcpy(skbn->data, ip, ip_len);
 ```
 
 The missing `doff >= 5` check in `rmnet_map_process_next_hdr_packet` and the zero segment length lets `__rmnet_map_segment_coal_skb` write TCP fields despite reserving zero TCP bytes which end up overwriting the `skb_shared_info` fields. In terms of flags requirements this code path requires `RMNET_FLAGS_INGRESS_COALESCE` or `RMNET_PRIV_FLAGS_INGRESS_MAP_CKSUMV5` and requires a linear skb (which is the default).
+
+Related to this bug `rmnet_frag_ipv6_skip_exthdr` allows `ip_len` to be large enough to wrap the addition in `rmnet_alloc_skb`:
+```c
+u16 hdr_len = frag_desc->ip_len + frag_desc->trans_len;  /* 65536 -> 0 */
+head_skb = alloc_skb(hdr_len + 32, GFP_ATOMIC);          /* alloc_skb(32) */
+skb_reserve(head_skb, 32);
+skb_put(head_skb, hdr_len);                              /* skb_put(0) */
+```
+
+It leads to an out-of-bounds write when the checksum gets written (like in the previous bug), but this time far beyonf the skb allocation. The only reason why i do not treat this bug as an actual finding is that it requires the MAP frame to be over `65KB` which is not realstic for a default IPA configuration. It means that IPA is most of the time unable to deliver single-skb over `65KB` long.
 
 ## Exploitability
 
@@ -329,4 +346,7 @@ Full code of the poc: [here](https://gist.github.com/n4sm/49468d9cfc2215b8d27b23
 
 # Conclusion
 
-At first, I did not know that the vendors had to fully publish the source code, from now on I will definitly do some fuzzing and VR on other obscure chinese smartphones drivers. What was interesting with today's findings is that the Xiaomi 18 has just been released a few days ago so the timing for this research is cool enough. I hope you enjoyed this blogpost, if you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
+At first, I did not know that the vendors had to fully publish the source code, from now on I will definitly do some fuzzing and VR on other obscure chinese smartphones drivers. What was interesting with today's findings is that the Xiaomi 18 has just been released a few days ago so the timing for this research is cool enough. Even though these two bugs are not critical at all (one leads to a DoS and the other is a restricted out-of-bounds write) I hope 
+
+
+Even though these two bugs are not critical at all (one leads to a DoS and the other is a restricted out-of-bounds write) I hope you enjoyed this blogpost, if you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
