@@ -497,100 +497,102 @@ int main(void)
 
 # Conclusion
 
-I reproduced the oob in unicorn on the drivers of the Xiaomi 18 as well as in qemu:
+I reproduced the oob in unicorn on the drivers of the Xiaomi 18 as well as in qemu, this is the local version but the CP-to-AP is similar in terms of outcome:
 ```
-[   11.219554] ==================================================================
-[   11.220069] BUG: KASAN: slab-out-of-bounds in qmi_decode+0x86c/0xe40 [qmi_helpers]
-[   11.221852] Write of size 4 at addr fff000000fbb9d88 by task kworker/u8:2/50
-[   11.222117] 
-[   11.222129] modem_feed: injected frame to ports 0x4000..0x401f
-[   11.223257] CPU: 0 UID: 0 PID: 50 Comm: kworker/u8:2 Tainted: G           O        6.18.0-dirty #2 PREEMPT 
-[   11.223864] Tainted: [O]=OOT_MODULE
-[   11.223985] Hardware name: linux,dummy-virt (DT)
-[   11.224499] Workqueue: qmi_msg_handler qmi_data_ready_work [qmi_helpers]
-[   11.225970] Call trace:
-[   11.226269]  show_stack+0x2c/0x3c (C)
-[   11.227221]  dump_stack_lvl+0xb4/0xd4
-[   11.227598]  print_report+0x118/0x5d8
-[   11.227913]  kasan_report+0xb0/0xf4
-[   11.228216]  kasan_check_range+0x100/0x1a8
-[   11.228546]  __asan_memcpy+0x54/0x94
-[   11.228887]  qmi_decode+0x86c/0xe40 [qmi_helpers]
-[   11.229316]  qmi_decode+0x9b8/0xe40 [qmi_helpers]
-[   11.229739]  qmi_decode_message+0x6c/0x94 [qmi_helpers]
-[   11.230192]  qmi_invoke_handler+0x1e8/0x304 [qmi_helpers]
-[   11.230621]  qmi_handle_message+0x164/0x3b0 [qmi_helpers]
-[   11.231048]  qmi_data_ready_work+0x948/0xd78 [qmi_helpers]
-[   11.231514]  process_one_work+0x5a4/0xcdc
-[   11.231774]  worker_thread+0x744/0xea0
-[   11.232023]  kthread+0x3f4/0x774
-[   11.232353]  ret_from_fork+0x10/0x20
-[   11.232765] 
-[   11.232844] Allocated by task 50:
-[   11.233038]  kasan_save_stack+0x3c/0x64
-[   11.233318]  kasan_save_track+0x20/0x3c
-[   11.233572]  kasan_save_alloc_info+0x40/0x54
-[   11.233870]  __kasan_kmalloc+0xb8/0xbc
-[   11.234117]  __kmalloc_noprof+0x1b4/0x560
-[   11.234360]  qmi_invoke_handler+0x1b0/0x304 [qmi_helpers]
-[   11.234748]  qmi_handle_message+0x164/0x3b0 [qmi_helpers]
-[   11.235132]  qmi_data_ready_work+0x948/0xd78 [qmi_helpers]
-[   11.235521]  process_one_work+0x5a4/0xcdc
-[   11.235733]  worker_thread+0x744/0xea0
-[   11.235937]  kthread+0x3f4/0x774
-[   11.236219]  ret_from_fork+0x10/0x20
-[   11.236466] 
-[   11.236567] The buggy address belongs to the object at fff000000fbb9d80
-[   11.236567]  which belongs to the cache kmalloc-8 of size 8
-[   11.236770] The buggy address is located 0 bytes to the right of
-[   11.236770]  allocated 8-byte region [fff000000fbb9d80, fff000000fbb9d88)
-[   11.236982] 
-[   11.237103] The buggy address belongs to the physical page:
-[   11.237590] page: refcount:0 mapcount:0 mapping:0000000000000000 index:0x0 pfn:0x4fbb9
-[   11.238043] flags: 0x3fffe0000000000(node=0|zone=0|lastcpupid=0x1ffff)
-[   11.238509] page_type: f5(slab)
-[   11.239082] raw: 03fffe0000000000 fff0000009401500 dead000000000122 0000000000000000
-[   11.239306] raw: 0000000000000000 0000000080800080 00000000f5000000 0000000000000000
-[   11.239519] page dumped because: kasan: bad access detected
-[   11.239626] 
-[   11.239691] Memory state around the buggy address:
-[   11.240058]  fff000000fbb9c80: fa fc fc fc fa fc fc fc fa fc fc fc 00 fc fc fc
-[   11.240246]  fff000000fbb9d00: 00 fc fc fc 00 fc fc fc fa fc fc fc fa fc fc fc
-[   11.240412] >fff000000fbb9d80: 00 fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
-[   11.240548]                       ^
-[   11.240726]  fff000000fbb9e00: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
-[   11.240876]  fff000000fbb9e80: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
-[   11.241016] ==================================================================
-[   11.242069] Kernel panic - not syncing: kasan.fault=panic set ...
-[   11.256872] CPU: 0 UID: 0 PID: 50 Comm: kworker/u8:2 Tainted: G           O        6.18.0-dirty #2 PREEMPT 
-[   11.257576] Tainted: [O]=OOT_MODULE
-[   11.257877] Hardware name: linux,dummy-virt (DT)
-[   11.258236] Workqueue: qmi_msg_handler qmi_data_ready_work [qmi_helpers]
-[   11.259055] Call trace:
-[   11.259347]  show_stack+0x2c/0x3c (C)
-[   11.259860]  dump_stack_lvl+0x50/0xd4
-[   11.260442]  dump_stack+0x20/0x2c
-[   11.261007]  vpanic+0x544/0x688
-[   11.261623]  nmi_panic+0x0/0x10c
-[   11.262452]  print_report+0x0/0x5d8
-[   11.263407]  kasan_report+0xbc/0xf4
-[   11.264332]  kasan_check_range+0x100/0x1a8
-[   11.265239]  __asan_memcpy+0x54/0x94
-[   11.265859]  qmi_decode+0x86c/0xe40 [qmi_helpers]
-[   11.266643]  qmi_decode+0x9b8/0xe40 [qmi_helpers]
-[   11.267422]  qmi_decode_message+0x6c/0x94 [qmi_helpers]
-[   11.268173]  qmi_invoke_handler+0x1e8/0x304 [qmi_helpers]
-[   11.268924]  qmi_handle_message+0x164/0x3b0 [qmi_helpers]
-[   11.269694]  qmi_data_ready_work+0x948/0xd78 [qmi_helpers]
-[   11.270448]  process_one_work+0x5a4/0xcdc
-[   11.271002]  worker_thread+0x744/0xea0
-[   11.271492]  kthread+0x3f4/0x774
-[   11.272036]  ret_from_fork+0x10/0x20
-[   11.272917] SMP: stopping secondary CPUs
-[   11.273955] Kernel Offset: 0x12ffc4200000 from 0xffff800080000000
-[   11.274402] PHYS_OFFSET: 0x40000000
-[   11.274734] CPU features: 0x000000,0001e300,4f7c67c1,0566761f
-[   11.275194] Memory Limit: none
+running unprivileged AF_QIPCRTR test
+unprivileged sender: uid=1000 euid=1000
+send port 0x4000: 183 (ok)
+[   13.421234] ==================================================================
+[   13.421734] BUG: KASAN: slab-out-of-bounds in qmi_decode+0x86c/0xe40 [qmi_helpers]
+[   13.423686] Write of size 4 at addr fff0000010d244a8 by task kworker/u8:2/53
+[   13.423977] 
+[   13.425387] CPU: 1 UID: 0 PID: 53 Comm: kworker/u8:2 Tainted: G           O        6.18.0-dirty #2 PREEMPT 
+[   13.426095] Tainted: [O]=OOT_MODULE
+[   13.426220] Hardware name: linux,dummy-virt (DT)
+[   13.426731] Workqueue: qmi_msg_handler qmi_data_ready_work [qmi_helpers]
+[   13.428447] Call trace:
+[   13.428840]  show_stack+0x2c/0x3c (C)
+[   13.429903]  dump_stack_lvl+0xb4/0xd4
+[   13.430251]  print_report+0x118/0x5d8
+[   13.430570]  kasan_report+0xb0/0xf4
+[   13.430883]  kasan_check_range+0x100/0x1a8
+[   13.431221]  __asan_memcpy+0x54/0x94
+[   13.431569]  qmi_decode+0x86c/0xe40 [qmi_helpers]
+[   13.432023]  qmi_decode+0x9b8/0xe40 [qmi_helpers]
+[   13.432458]  qmi_decode_message+0x6c/0x94 [qmi_helpers]
+[   13.432896]  qmi_invoke_handler+0x1e8/0x304 [qmi_helpers]
+[   13.433348]  qmi_handle_message+0x164/0x3b0 [qmi_helpers]
+[   13.433788]  qmi_data_ready_work+0x948/0xd78 [qmi_helpers]
+[   13.434228]  process_one_work+0x5a4/0xcdc
+[   13.434496]  worker_thread+0x744/0xea0
+[   13.434754]  kthread+0x3f4/0x774
+[   13.435091]  ret_from_fork+0x10/0x20
+[   13.435545] 
+[   13.435631] Allocated by task 53:
+[   13.435846]  kasan_save_stack+0x3c/0x64
+[   13.436134]  kasan_save_track+0x20/0x3c
+[   13.436396]  kasan_save_alloc_info+0x40/0x54
+[   13.436696]  __kasan_kmalloc+0xb8/0xbc
+[   13.436951]  __kmalloc_noprof+0x1b4/0x560
+[   13.437283]  qmi_invoke_handler+0x1b0/0x304 [qmi_helpers]
+[   13.437706]  qmi_handle_message+0x164/0x3b0 [qmi_helpers]
+[   13.438112]  qmi_data_ready_work+0x948/0xd78 [qmi_helpers]
+[   13.438569]  process_one_work+0x5a4/0xcdc
+[   13.438788]  worker_thread+0x744/0xea0
+[   13.439004]  kthread+0x3f4/0x774
+[   13.439375]  ret_from_fork+0x10/0x20
+[   13.439697] 
+[   13.439817] The buggy address belongs to the object at fff0000010d244a0
+[   13.439817]  which belongs to the cache kmalloc-8 of size 8
+[   13.440037] The buggy address is located 0 bytes to the right of
+[   13.440037]  allocated 8-byte region [fff0000010d244a0, fff0000010d244a8)
+[   13.440303] 
+[   13.440487] The buggy address belongs to the physical page:
+[   13.441283] page: refcount:0 mapcount:0 mapping:0000000000000000 index:0x0 pfn:0x50d24
+[   13.441928] flags: 0x3fffe0000000000(node=0|zone=0|lastcpupid=0x1ffff)
+[   13.443277] page_type: f5(slab)
+[   13.443986] raw: 03fffe0000000000 fff0000009401500 dead000000000122 0000000000000000
+[   13.444244] raw: 0000000000000000 0000000080800080 00000000f5000000 0000000000000000
+[   13.444459] page dumped because: kasan: bad access detected
+[   13.444576] 
+[   13.444645] Memory state around the buggy address:
+[   13.445131]  fff0000010d24380: 05 fc fc fc 00 fc fc fc 06 fc fc fc 00 fc fc fc
+[   13.445345]  fff0000010d24400: 00 fc fc fc 00 fc fc fc 00 fc fc fc fa fc fc fc
+[   13.445543] >fff0000010d24480: fa fc fc fc 00 fc fc fc fc fc fc fc fc fc fc fc
+[   13.445698]                                   ^
+[   13.445899]  fff0000010d24500: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
+[   13.446057]  fff0000010d24580: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
+[   13.446207] ==================================================================
+[   13.447695] Kernel panic - not syncing: kasan.fault=panic set ...
+[   13.467895] CPU: 1 UID: 0 PID: 53 Comm: kworker/u8:2 Tainted: G           O        6.18.0-dirty #2 PREEMPT 
+[   13.468927] Tainted: [O]=OOT_MODULE
+[   13.469355] Hardware name: linux,dummy-virt (DT)
+[   13.469830] Workqueue: qmi_msg_handler qmi_data_ready_work [qmi_helpers]
+[   13.470871] Call trace:
+[   13.471213]  show_stack+0x2c/0x3c (C)
+[   13.471820]  dump_stack_lvl+0x50/0xd4
+[   13.472483]  dump_stack+0x20/0x2c
+[   13.473208]  vpanic+0x544/0x688
+[   13.473863]  nmi_panic+0x0/0x10c
+[   13.474603]  print_report+0x0/0x5d8
+[   13.475216]  kasan_report+0xbc/0xf4
+[   13.475828]  kasan_check_range+0x100/0x1a8
+[   13.476500]  __asan_memcpy+0x54/0x94
+[   13.477164]  qmi_decode+0x86c/0xe40 [qmi_helpers]
+[   13.478010]  qmi_decode+0x9b8/0xe40 [qmi_helpers]
+[   13.478826]  qmi_decode_message+0x6c/0x94 [qmi_helpers]
+[   13.479657]  qmi_invoke_handler+0x1e8/0x304 [qmi_helpers]
+[   13.480548]  qmi_handle_message+0x164/0x3b0 [qmi_helpers]
+[   13.481468]  qmi_data_ready_work+0x948/0xd78 [qmi_helpers]
+[   13.482441]  process_one_work+0x5a4/0xcdc
+[   13.483122]  worker_thread+0x744/0xea0
+[   13.483668]  kthread+0x3f4/0x774
+[   13.484263]  ret_from_fork+0x10/0x20
+[   13.485220] SMP: stopping secondary CPUs
+[   13.486440] Kernel Offset: 0x2f55c6a00000 from 0xffff800080000000
+[   13.487094] PHYS_OFFSET: 0x40000000
+[   13.487593] CPU features: 0x000000,0001e300,4f7c67c1,0566761f
+[   13.488246] Memory Limit: none
 ```
 
 I will not post the code of my emulator / modified qemu version because I am working on a systematic fuzzer (syzkaller), I might release it later. I hope you enjoyed this blogpost, if you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
