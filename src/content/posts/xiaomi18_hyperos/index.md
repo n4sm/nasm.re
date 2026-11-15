@@ -1,5 +1,5 @@
 ---
-title: "Xiaomi 18 HyperOS - CP-to-AP oob-write in rmnet"
+title: "Xiaomi 18 HyperOS - CP-to-AP oob-write in rmnet 1/2"
 published: 2026-11-10
 tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
 category: "research"
@@ -349,7 +349,7 @@ Full code of the poc: [here](https://gist.github.com/n4sm/49468d9cfc2215b8d27b23
 
 # Conclusion
 
-At first, I did not know that the vendors had to fully publish the source code, from now on I will definitly do some fuzzing and VR on other obscure chinese smartphones drivers. What was interesting with today's findings is that the Xiaomi 18 has just been released a few days ago so the timing for this research is cool enough. Even though these two bugs are not critical at all (one leads to a DoS and the other is a restricted out-of-bounds write) I hope 
+At first, I did not know that the vendors had to fully publish the source code, from now on I will definitly do some fuzzing and VR on other obscure chinese smartphones drivers. What was interesting with today's findings is that the Xiaomi 18 has just been released a few days ago so the timing for this research is cool enough. Even though these two bugs are not critical at all (one leads to a DoS and the other is a restricted out-of-bounds write) I hope you still enjoyed reading this post.
 
 
-Even though these two bugs are not critical at all (one leads to a DoS and the other is a restricted out-of-bounds write) I hope you enjoyed this blogpost, if you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
+Even though these two bugs are not critical at all (one leads to a DoS and the other is a restricted out-of-bounds write). I hope you enjoyed this blogpost, if you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
