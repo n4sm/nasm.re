@@ -3,6 +3,7 @@ title: "Xiaomi 18 HyperOS - CP-to-AP / local unpriv out-of-bounds write in qmi_h
 published: 2026-11-10
 tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
 category: "research"
+draft: true
 description: Write-up about an out-of-bounds write I found in qmi_helpers device shipped in the Xiaomi 18 which turns out to be a LPE vector as well if you are using the QMI driver.
 ---
 
