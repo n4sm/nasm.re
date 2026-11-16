@@ -231,6 +231,66 @@ memcpy(skbn->data, ip, ip_len);
 
 The missing `doff >= 5` check in `rmnet_map_process_next_hdr_packet` and the zero segment length lets `__rmnet_map_segment_coal_skb` write TCP fields despite reserving zero TCP bytes which end up overwriting the `skb_shared_info` fields. In terms of flags requirements this code path requires `RMNET_FLAGS_INGRESS_COALESCE` or `RMNET_PRIV_FLAGS_INGRESS_MAP_CKSUMV5` and requires a linear skb (which is the default).
 
+## ipv6 variant
+
+There is a variant of this bug, let's consider the following input:
+```
+QMAP frame: 3820 bytes (offsets from frame start)
+  +0x0000       flags = 0x40
+  +0x0002 be16  QMAP length = 3816
+  +0x0004..001f coalescing header
+  +0x0008 be16  NLO length = 3776
+  +0x0020..0047 IPv6 base header: 40 bytes
+  +0x0048..0847 first extension: 2048 bytes
+  +0x0848..0ed7 second extension: 1680 bytes
+  +0x0ed8..0eeb trailing bytes; TCP data offset = 0
+```
+
+It will lead to the following code path:
+```c
+// rmnet_map_process_next_hdr_packet
+coal = skb->data + 4;
+if (coal->header_type != COALESCING || coal->num_nlos != 1)
+    return -EINVAL;
+
+skb_pull(skb, 4 + 28);                 // skb->data = frame offset 0x0020
+
+ip_len = ipv6_skip_exthdr(skb, 40, ...);
+// 40 + ((0xFF + 1) * 8) + ((0xD1 + 1) * 8) = 3768
+// TCP starts at frame offset 0x0020 + 3768 = 0x0ED8
+
+tcp = skb->data + ip_len;
+tcp_len = tcp->doff * 4;              // byte 0x0EE4 = 0 -> tcp_len = 0
+seg_len = ntohs(coal->nl_pairs[0].pkt_len) - ip_len - tcp_len;
+//        3776                              - 3768   - 0 = 8
+
+// Extension headers disable GRO reuse; close_type=0 avoids the other shortcut.
+__rmnet_map_segment_coal_skb(skb, ip_len, tcp_len, seg_len,
+                             pkt_count=1, csum_valid=false);
+
+// __rmnet_map_segment_coal_skb
+dlen = pkt_count * seg_len;            // 8
+hlen = ip_len + tcp_len;               // 3768
+skbn = alloc_skb(hlen + dlen);         // 3776 data bytes; skb->end = 3776
+
+skb_reserve(skbn, hlen);               // data = head + 3768
+skb_put(skbn, dlen);                   // append 8 bytes
+skb_push(skbn, tcp_len);               // push 0
+th = tcp_hdr(skbn);                    // th = skb_shared_info - 8
+
+th->seq = ...;                         // store at shinfo - 4, inside data area
+check = &th->check;                    // points to shinfo + 8: frag_list
+
+skb_push(skbn, ip_len);                // push IPv6 and extension headers
+memcpy(skbn->data, ip, ip_len);
+*check = pseudo_checksum;              // overwrite low 16 bits of frag_list
+*check = corrupted_checksum;           // overwrite those same 2 bytes again
+```
+
+Ultimately overwriting `shinfo+8`.
+
+## unrealistic frag path bug 
+
 Related to this bug `rmnet_frag_ipv6_skip_exthdr` allows `ip_len` to be large enough to wrap the addition in `rmnet_alloc_skb`:
 ```c
 u16 hdr_len = frag_desc->ip_len + frag_desc->trans_len;  /* 65536 -> 0 */
@@ -243,7 +303,56 @@ It leads to an out-of-bounds write when the checksum gets written (like in the p
 
 ## Exploitability
 
-Overwriting `skb_shared_info` is indeed an out-of-bounds write but realistically the kernel stack will just drop the packet and so far I don't think we can get interesting primitives out of these two bugs (which is very frustrating but it is what it is).
+Overwriting `skb_shared_info` is indeed an out-of-bounds write but realistically the kernel stack will just drop the packet and so far I don't think we can get interesting primitives out of these two bugs (which is very frustrating but it is what it is). We can overwrite `shinfo+0x10` and `+4` which means we have control over `.tx_flags` and 
+```c
+union {
+		struct skb_shared_hwtstamps hwtstamps;
+		struct xsk_tx_metadata_compl xsk_meta;
+};
+```
+
+This is `skb_shared_info`:
+```c
+struct skb_shared_info {
+	__u8		flags;
+	__u8		meta_len;
+	__u8		nr_frags;
+	__u8		tx_flags;
+	unsigned short	gso_size;
+	/* Warning: this field is not always filled in (UFO)! */
+	unsigned short	gso_segs;
+	struct sk_buff	*frag_list;
+	union {
+		struct skb_shared_hwtstamps hwtstamps;
+		struct xsk_tx_metadata_compl xsk_meta;
+	};
+	unsigned int	gso_type;
+	u32		tskey;
+
+	/*
+	 * Warning : all fields before dataref are cleared in __alloc_skb()
+	 */
+	atomic_t	dataref;
+
+	union {
+		struct {
+			u32		xdp_frags_size;
+			u32		xdp_frags_truesize;
+		};
+
+		/*
+		 * Intermediate layers must ensure that destructor_arg
+		 * remains valid until skb destructor.
+		 */
+		void		*destructor_arg;
+	};
+
+	/* must be last field, see pskb_expand_head() */
+	skb_frag_t	frags[MAX_SKB_FRAGS];
+};
+```
+
+With the ipv6 variant we are able to overwrite `.frag_list` which will eventually lead to a crash when the packet will get dropped and the `skb_shared_info` freed.
 
 # What's up from the public available source?
 
