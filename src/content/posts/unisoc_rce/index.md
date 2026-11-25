@@ -7,6 +7,10 @@ draft: true
 description: Multiple 0-days in the Unisoc T7250 chipset
 ---
 
+# Introduction
+
+I am using `arctic_global_images_OS3.0.13.0.WBVMIXM_16.0`, the firmware image of the [Xiaomi Redmi A7 Pro](https://www.gsmarena.com/xiaomi_redmi_a7_pro-14463.php) which is running a `Unisoc T7250`. The bugs are still present in the latest firmware but the one I reverse is the release from September 2026.
+
 # Reversing
 
 The baseband will read the IP/dns packets from a receive queue and parse them in this function:
@@ -1088,5 +1092,100 @@ LABEL_32:
 ```
 
 For `DNS_TYPE_PTR` we get a large heap out-of-bounds write which is fully user-controlled. The `strlen_impl` loop replaces the bytes under `0x1F` by dots but we can circumvent this by adding null bytes for the first bytes which will bypass the strlen.
+
+## IMS RTT RTP reorder slot index
+
+The reorder buffer has 24 slots. The slot index is computed as ring_idx + (packet_seq - stored_seq) and normalised with a single if (idx > 23) idx -= 24. A forward delta larger than the ring passes the caller's sequence-window gate, leaves idx > 23, and the slot pointer is written at ctx + 0x3C08 + 4*idx, outside the ring. The payload is then memcpy'd to that pointer.
+
+```c
+/* sub_8B043248 — RTT DL_putPkt */
+int rtp_reorder_store(rtp_reorder_t *ctx, u32 packet_seq, u16 payload_len, u8 *payload)
+{
+    u32 slot_idx = ctx->ring_idx;                 /* a1[1] */
+    u32 *slot = &ctx->slot[slot_idx];             /* ctx+0x3C08+4*slot_idx */
+
+    if (ctx->stored_seq == slot_idx && *slot == 0)
+        ret_seq = ctx->stored_seq;
+
+    u32 window = slot_idx - ctx->stored_seq;
+    if (slot_idx < ctx->stored_seq)
+        window += 24;
+
+    if (*slot != 0) {
+        u16 stored_pkt_seq = *(u16 *)(*slot + 8);
+        /* only rejects when stored_seq - new_seq > window (backwards gap). */
+        if ((int)(stored_pkt_seq - packet_seq) > window)
+            return unlock(ctx);
+
+        u32 base = ctx->ring_idx;
+        ret_seq = base + packet_seq - stored_pkt_seq;
+        if (stored_pkt_seq < packet_seq) {
+            u16 next = (ret_seq < 24) ? ret_seq : ret_seq - 24;
+            ctx->ring_idx = next;
+        }
+    }
+
+    /* BUG: a single subtract cannot normalise a forward delta > 24. */
+    if (ret_seq > 23)
+        ret_seq -= 24;
+
+    u32 heap_used = ctx->heap_used;               /* ctx+0x3C68 */
+    if (heap_used > 0x3BAC)
+        heap_used = 0;
+    u8 *new_slot = (u8 *)ctx + heap_used + 8;
+
+    /* BUG: slot index not bounded -> ctx+0x3C08+4*ret_seq */
+    ctx->slot[ret_seq] = new_slot;
+    memset(new_slot, 0, 84);
+    *(u16 *)(ctx->slot[ret_seq] + 10) = payload_len;
+    *(u16 *)(ctx->slot[ret_seq] + 8)  = packet_seq;
+    ...
+    memcpy(ctx->slot[ret_seq] + 12, payload, payload_len);
+}
+```
+
+# EGPRS dbuf append without cap
+
+When a TBF slot already holds a buffer for the same BSN, the EGPRS
+receive path merges the new block into it with `memcpy(dst->data + dst->len,
+src->data, src->len)` and `dst->len = (u8)(dst->len + src->len)`, with no
+`len1 + len2 <= 75` check. Each block is validated individually against the
+75-byte per-fragment capacity, but the merged length is not. Two 75-byte
+fragments write through `dbuf+157`, overwriting the `+84` pool free-list link
+and the next slot; repeated same-BSN appends also wrap the `u8` length.
+
+**Decompiled code (renamed).**
+
+```c
+/* rlc_dbuf_append_unchecked(dst, src) — dbuf: data at +0, len at +4 (u8) */
+int rlc_dbuf_append_unchecked(dbuf_t *dst, dbuf_t *src) // 0x8bbec978
+{
+    if (dst == NULL) fatal("dbuf1_ptr_null", 145);
+    if (src == NULL) fatal("dbuf2_ptr_null", 146);
+
+    /* BUG: no dst->len + src->len <= 75 check. */
+    memcpy(dst->data + dst->len, src->data, src->len);
+
+    dst->len = (u8)(dst->len + src->len);   /* BUG: 8-bit truncation */
+    return dst->len;
+}
+```
+
+```c
+/* rlc_egprs_dl_receive_unack / _ack — merge on repeated BSN */
+dbuf_t *pending = slots[bsn].dbuf;
+if (pending == NULL) {
+    ...
+} else if (block->type != 2) {
+    rlc_dbuf_append_unchecked(pending, block->dbuf);
+    ...
+} else {
+    rlc_dbuf_append_unchecked(block->dbuf, pending);
+}
+```
+
+# Conclusion
+
+I have reproduced these findings in my emulator rather reliably.
 
 If you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
