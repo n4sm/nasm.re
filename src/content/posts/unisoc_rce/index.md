@@ -545,6 +545,10 @@ LABEL_35:
 
 This functions is decapsulating the ipsec packets and receives the incoming packets in three different functions: `parse_icmp`, `parse_tcp` and `parse_udp`. Let's dig into `parse_udp`:
 ```c
+// UDP receive/parse. DNS responses are intercepted before PCB dispatch: when
+// the UDP source port == 53, dns_response_parse_unchecked is called with the
+// destination (client) port and DNS XID; return != 2 means the DNS cache
+// consumed the packet, return 2 falls through to normal UDP PCB/socket delivery.
 int __fastcall parse_udp(pkt_buf_t *pkt, int a2, int a3, int a4)
 {
   udp_mib_t *mib; // r6
@@ -582,27 +586,27 @@ int __fastcall parse_udp(pkt_buf_t *pkt, int a2, int a3, int a4)
   pkta = pkt;
   mib = udp_mib;
   mcast_ctx[0] = 0;
-  ip_hdr_words = (int *)pkt->nb_prot;
-  ihl_bytes = (4 * *(unsigned __int8 *)ip_hdr_words) & 0x3F;
+  ip_hdr_words = pkt->nb_prot;
+  ihl_bytes = (4 * *ip_hdr_words) & 0x3F;
   if ( pkt->nb_plen < ihl_bytes + 8 )
   {
-    pkt_pullup(a1: (int *)&pkta, a2: ihl_bytes + 8, a3: 15);
+    pkt_pullup(a1: &pkta, a2: ihl_bytes + 8, a3: 15);
     if ( pullup_ret != 0 )
     {
 LABEL_3:
       ++mib->udpInErrors;
-      pkt_free(a1: (unsigned int)pkta);
+      pkt_free(a1: pkta);
       return -32;
     }
-    ip_hdr_words = (int *)pkta->nb_prot;
+    ip_hdr_words = pkta->nb_prot;
   }
-  udp_hdr = (udp_hdr_t *)&ip_hdr_words[*(_BYTE *)ip_hdr_words & 0xF];
+  udp_hdr = &ip_hdr_words[*ip_hdr_words & 0xF];
   udp_len = __rev16(udp_hdr->length);
   memcpy_aligned(result: hdr_copy, a2: ip_hdr_words, a3: ihl_bytes + 8, a4);
   dbg_flags = udp_debug_flags;
   if ( pkta->nb_tlen - ihl_bytes < udp_len || udp_len < 8 )
   {
-    if ( (*(_DWORD *)udp_debug_flags & 0x400) != 0 && (*(_DWORD *)udp_debug_flags & 0x100) != 0 )
+    if ( (*udp_debug_flags & 0x400) != 0 && (*udp_debug_flags & 0x100) != 0 )
       println(a1: "UDP: bad len pkt: rcvd: %u, hdr: %u.\n", pkta->nb_plen, __rev16(udp_hdr->length) + 8);
     goto LABEL_3;
   }
@@ -614,7 +618,7 @@ LABEL_3:
     pseudo_zero = 0;
     pseudo_proto = 17;
     pseudo_len = udp_hdr->length;
-    udp_hdr->checksum = inet_checksum(a1: (unsigned __int16 *)pseudo_src_dst, a2: 6);
+    udp_hdr->checksum = inet_checksum(a1: pseudo_src_dst, a2: 6);
   }
   pkt_strip(pkt: pkta, n: ihl_bytes);
   pkta = pkt_pulled;
@@ -623,28 +627,28 @@ LABEL_3:
     nb_tlen = pkt_pulled->nb_tlen;
     if ( nb_tlen > udp_len && pkt_trim(pkt: pkt_pulled, n: nb_tlen - udp_len) != 0 )
       goto LABEL_3;
-    println(a1: "tcpip: need check is %d", (char)pkta->cksum_verify);
+    println(a1: "tcpip: need check is %d", pkta->cksum_verify);
     if ( pkta->cksum_verify == 1 && udp_csum != 0 )
     {
       pkt_checksum(a1: pkta, a2: 0, a3: 0);
-      csum_calc = (unsigned __int16)~v15;
+      csum_calc = ~v15;
       if ( v15 == -1 )
         csum_calc = 0xFFFF;
       udp_hdr->checksum = udp_csum;
       if ( csum_calc != udp_csum )
       {
-        if ( (*(_DWORD *)dbg_flags & 0x400) != 0 && (*(_DWORD *)dbg_flags & 0x100) != 0 )
+        if ( (*dbg_flags & 0x400) != 0 && (*dbg_flags & 0x100) != 0 )
         {
           println(
             a1: "tcpip: udpdemux - bad xsum %04x right %04x from %u.%u.%u.%u\n",
             udp_csum,
             csum_calc,
-            (unsigned __int8)pkta->addr_cache,
+            pkta->addr_cache,
             BYTE1(pkta->addr_cache),
-            (unsigned __int8)BYTE2(pkta->addr_cache),
+            BYTE2(pkta->addr_cache),
             HIBYTE(pkta->addr_cache));
           if ( (*dbg_flags & 2) != 0 )
-            ip_dump_packet(result: (unsigned __int16 *)hdr_copy);
+            ip_dump_packet(result: hdr_copy);
         }
         goto LABEL_3;
       }
@@ -657,22 +661,24 @@ LABEL_3:
     pkta = pkt_pulled2;
     if ( pkt_pulled2 != nullptr )
     {
-      udp_ports = (unsigned __int16 *)((char *)hdr_copy + ihl_bytes);
-      udp_ntohs(result: (unsigned __int16 *)((char *)hdr_copy + ihl_bytes));
-      if ( (*(_DWORD *)dbg_flags & 0x400) != 0 && (*(_DWORD *)dbg_flags & 0x100) != 0 )
+      udp_ports = (hdr_copy + ihl_bytes);
+      udp_ntohs(result: (hdr_copy + ihl_bytes));
+      if ( (*dbg_flags & 0x400) != 0 && (*dbg_flags & 0x100) != 0 )
         println(
           a1: "UDP: pkt[%u] from %u.%u.%u.%u:%d to %d\n",
           udp_len,
-          (unsigned __int8)pkta->addr_cache,
+          pkta->addr_cache,
           BYTE1(pkta->addr_cache),
-          (unsigned __int8)BYTE2(pkta->addr_cache),
+          BYTE2(pkta->addr_cache),
           HIBYTE(pkta->addr_cache),
           *udp_ports,
           udp_ports[1]);
+      // [DNS] response: UDP source port 53 -> parse_dns with &dst_port
       if ( *udp_ports == 53 )
       {
         tcpip_unlock(a1: 0);
-        ret = dns_response_parse_unchecked(a1: (int)pkta, a2: udp_ports + 1);
+        // [DNS] match cache XID + client port; ret==2 falls through to PCB dispatch
+        ret = parse_dns(pkt: pkta, client_port_ptr: udp_ports + 1);
         tcpip_lock(a1: 0);
         ++mib->udpInDatagrams;
         if ( ret != 2 )
@@ -684,7 +690,7 @@ LABEL_3:
         if ( pcb == nullptr )
         {
           if ( is_multicast && mcast_ctx[0] != 0 )
-            return udp_mcast_deliver(a1: (unsigned int)pkta, a2: mcast_ctx[0], a3: &upcall_info);
+            return udp_mcast_deliver(a1: pkta, a2: mcast_ctx[0], a3: &upcall_info);
           if ( ip_dst == -1
             || (rx_iface = pkta->iface, ip_dst == rx_iface->ipv4_addr1)
             || HIBYTE(ip_dst) == 255
@@ -692,29 +698,23 @@ LABEL_3:
             || ip_dst == rx_iface->ipv4_addr3
             || __builtin_bswap32(ip_dst) >> 28 == 14 )
           {
-            if ( (*(_DWORD *)dbg_flags & 0x400) != 0 && (*(_DWORD *)dbg_flags & 0x100) != 0 )
-              println(a1: aUdpIgnoringIpB, *(_DWORD *)dbg_flags << 21);
+            if ( (*dbg_flags & 0x400) != 0 && (*dbg_flags & 0x100) != 0 )
+              println(a1: aUdpIgnoringIpB, *dbg_flags << 21);
             ++mib->udpInErrors;
           }
           else
           {
-            if ( (*(_DWORD *)dbg_flags & 0x400) != 0 && (*(_DWORD *)dbg_flags & 0x100) != 0 )
+            if ( (*dbg_flags & 0x400) != 0 && (*dbg_flags & 0x100) != 0 )
             {
               println(a1: "UDP: unexpected port %04x\n", udp_ports[1]);
               if ( (*dbg_flags & 2) != 0 )
-                ip_dump_packet(result: (unsigned __int16 *)hdr_copy);
+                ip_dump_packet(result: hdr_copy);
             }
             udp_ntohs(result: udp_ports);
-            icmp_send_unreachable(
-              a1: 3,
-              a2: pkta->addr_cache,
-              a3: ip_dst,
-              a4: (int)hdr_copy,
-              a5: 0,
-              a6: (int)pkta->iface);
+            icmp_send_unreachable(a1: 3, a2: pkta->addr_cache, a3: ip_dst, a4: hdr_copy, a5: 0, a6: pkta->iface);
             ++mib->udpNoPorts;
           }
-          pkt_free(a1: (unsigned int)pkta);
+          pkt_free(a1: pkta);
           return 2;
         }
         if ( pcb->flags << 31 != 0
@@ -740,7 +740,7 @@ LABEL_51:
       }
       if ( is_multicast )
       {
-        udp_mcast_mark_recipient(a1: (int)pkta, a2: (int)pseudo_src_dst, a3: (int)pcb, a4: mcast_ctx);
+        udp_mcast_mark_recipient(a1: pkta, a2: pseudo_src_dst, a3: pcb, a4: mcast_ctx);
         goto LABEL_51;
       }
       ++mib->udpInDatagrams;
@@ -757,7 +757,7 @@ LABEL_51:
       }
       ++mib->udpInErrors;
 LABEL_35:
-      pkt_free(a1: (unsigned int)pkta);
+      pkt_free(a1: pkta);
       return ret;
     }
   }
@@ -766,6 +766,327 @@ LABEL_35:
 }
 ```
 
-This function iterates through `udp_pcb_list` which is referencing the opened sockets and if there is a match `recv_cb` is called to process the packet and send it to the corresponding socket/service. If the source port if 53, meaning that the packet is coming from a DNS server, `dns_response_parse_unchecked` is parsing the packet (a dns response), if no matching DNS cache entry is found the packet goes through the normal `udp_pcb_list` loop.
+This function iterates through `udp_pcb_list` which is referencing the opened sockets and if there is a match `recv_cb` is called to process the packet and send it to the corresponding socket/service. If the source port if 53, meaning that the packet is coming from a DNS server, `parse_dns` is parsing the packet (a dns response), if no matching DNS cache entry is found the packet goes through the normal `udp_pcb_list` loop.
+
+```c
+int __fastcall parse_dns(pkt_buf_t *pkt, unsigned __int16 *client_port_ptr)
+{
+  dns_cache_entry_t *dns_cache; // r4
+
+
+  dns_cache = (dns_cache_entry_t *)off_8B05A520;
+  first_name_offset = 0;
+  err_code = DNS_PARSE_OK;
+  ns_name_offset = 0;
+  ++*((_DWORD *)off_8B05A520 + 4);
+  dns_hdr = (dns_hdr_t *)pkt->nb_prot;
+  tcpip_lock(a1: 7u);
+  println(a1: aTcpipDnsTraceD_14);
+
+  do
+  {
+    dns_cache = dns_cache->next;
+    if ( dns_cache == nullptr )
+    {
+      tcpip_unlock(a1: 7u);
+      return 2;
+    }
+    println(a1: off_8B05A550[0], dns_cache, dns_cache->name, dns_cache->xid, dns_hdr->id);
+  } while ( dns_cache->xid == 0 || dns_cache->xid != dns_hdr->id || dns_cache->client_port != *client_port_ptr );
+
+  println(a1: off_8B05A554, dns_cache);
+  ++dns_cache->hit_count;
+  if ( dns_cache->rcode != 0 )
+  {
+    dns_cache->txt_list_ptr = 0;
+    dns_cache->txt_count = 0;
+    flags_raw = __rev16(dns_hdr->flags);
+    rcode = flags_raw & 0xF;
+    qdcount = __rev16(dns_hdr->qdcount);
+    nscount = __rev16(dns_hdr->nscount);
+    ancount = __rev16(dns_hdr->ancount);
+    arcount = __rev16(dns_hdr->arcount);
+    answer_end = qdcount + ancount;
+    authority_end = qdcount + ancount + nscount;
+    additional_end = (unsigned __int16)(authority_end + arcount);
+    dns_cache->error_status = 0;
+    dns_cache->rcode = rcode;
+    if ( (flags_raw & 0x8000) != 0 )
+    {
+      opcode = ((unsigned int)flags_raw >> 11) & 0xF;
+      if ( dns_cache->qtype == 30 ) ...
+      else ...
+    }
+    else ...
+    println(a1: "tcpip: dns_trace err %d, rcode %d, id=0x%x", err_code, rcode, dns_hdr->id);
+    if ( err_code != DNS_PARSE_OK ) ...
+    dns_cache->rcode = rcode;
+    if ( dns_cache->qtype != 30 )
+    {
+      if ( rcode != DNS_RCODE_NOERROR ) ...
+      dns_cache->field_1D4 = 0;
+      dns_cache->a_count = 0;
+      label = (dns_sublabel *)&dns_hdr[1];
+      LOWORD(offt) = 0;
+      dns_cache->aaaa_count = 0;
+      memset_zero(dst: dns_cache->aaaa_addr[0], n: 0x50u);
+      *(_DWORD *)dns_cache->answer_aaaa = 0;
+      rr_next = 0;
+      *(_DWORD *)&dns_cache->answer_aaaa[4] = 0;
+      *(_DWORD *)&dns_cache->answer_aaaa[8] = 0;
+      dns_cache->name_ptr = (unsigned int)dns_cache->name;
+      *(_DWORD *)&dns_cache->answer_aaaa[12] = 0;
+      while ( 2 )
+      {
+        rr_index = rr_next;
+        if ( rr_next >= additional_end ) ...
+        memset_zero(dst: decoded_name, n: 0x100u);
+        if ( (unsigned __int8)label->len >> 6 != 3 )
+        {
+          name_end = dns_decode_name(wire_name: label, out_cur: decoded_name);
+          name_len = (_WORD)name_end - (_WORD)label;
+          label = (dns_sublabel *)name_end;
+          LOWORD(offt) = name_len;
+          if ( *name_end == 0 )
+            label = (dns_sublabel *)(name_end + 1);
+        }
+        label_byte = (unsigned __int8)label->len;
+        if ( label_byte >> 6 == 3 )
+        {
+          next = (unsigned __int8)label->sublabel[0];
+          label = (dns_sublabel *)((char *)label + 2);
+          offt = next + ((label_byte & 0x3F) << 8);
+          src_name = (char *)dns_hdr + offt;
+          prefix_len = strlen_impl(s: decoded_name);
+          dns_decode_name(wire_name: src_name, out_cur: &decoded_name[prefix_len]);
+        }
+        name_offset = offt;
+        rr_cursor = dns_read_be16(p: (unsigned __int8 *)label, &out);
+        label = (dns_sublabel *)dns_read_be16(p: rr_cursor, out: &dns_class);
+        if ( dns_class != DNS_CLASS_IN )
+        {
+          err_code = DNS_PARSE_BAD_CLASS;
+          goto LABEL_73;
+        }
+        if ( err_code != DNS_PARSE_OK || rr_index < qdcount ) ...
+        offt = __builtin_bswap32(read_le32(p: (unsigned __int8 *)label)) & 0xFFFFFF00
+             | (unsigned __int8)label->sublabel[2];
+        rdata_ptr = (int *)dns_read_be16(p: (unsigned __int8 *)&label->sublabel[3], out: &rdlength);
+        rrtype = (unsigned __int16)out;
+        rdata_ptr2 = rdata_ptr;
+        if ( out == DNS_TYPE_PTR ) ...
+        if ( (unsigned __int16)out <= DNS_TYPE_PTR )
+        {
+          switch ( out )
+          {
+            case DNS_TYPE_A:
+              goto LABEL_46;
+            case DNS_TYPE_NS:
+              if ( ns_name_offset == 0 )
+                ns_name_offset = (unsigned __int16)((_WORD)rdata_ptr - (_WORD)dns_hdr);
+              goto LABEL_72;
+            case DNS_TYPE_CNAME:
+              v28 = (unsigned __int16)rdlength;
+              rrtype2 = DNS_TYPE_CNAME;
+              rdata_ptr3 = rdata_ptr;
+LABEL_62:
+              dns_store(entry: dns_cache, rrtype: rrtype2, rdata: rdata_ptr3, rdlength: v28);
+              goto LABEL_72;
+            case DNS_TYPE_WKS:
+              v28 = 1;
+              rdata_ptr3 = rdata_ptr;
+              rrtype2 = DNS_TYPE_WKS;
+              goto LABEL_62;
+            default:
+LABEL_72:
+              label = (dns_sublabel *)((char *)rdata_ptr2 + (unsigned __int16)rdlength);
+LABEL_73:
+              rr_next = rr_index + 1;
+              continue;
+          }
+        }
+        break;
+      }
+      switch ( out )
+      {
+        case DNS_TYPE_TXT:
+          v28 = (unsigned __int16)rdlength;
+          rrtype2 = DNS_TYPE_TXT;
+          rdata_ptr3 = rdata_ptr;
+          goto LABEL_62;
+        case DNS_TYPE_AAAA:
+LABEL_46:
+          if ( out == DNS_TYPE_A && rdlength != DNS_RDLEN_A )
+          {
+            err_code = DNS_PARSE_BAD_A_LEN;
+            goto LABEL_72;
+          }
+          ++*((_DWORD *)off_8B05A520 + 5);
+          if ( answer_end <= rr_index ) ...
+          if ( first_name_offset == 0 ) ...
+          println(a1: "tcpip: dns_trace dnc_set_answer1, offset %d", name_offset);
+          dns_store(entry: dns_cache, rrtype: out, rdata: rdata_ptr2, (unsigned __int16)rdlength);
+          if ( offt == 0 ) ...
+          if ( offt - 1 < 9 ) ...
+          break;
+        case DNS_TYPE_SRV:
+          src_name = (_BYTE *)((char *)rdata_ptr - (char *)dns_hdr + 6);
+          srv_record = (char *)dns_cache + 376 * (rr_index - qdcount);
+          srv_cursor = dns_read_be16(p: (unsigned __int8 *)rdata_ptr, out: (_WORD *)srv_record + 336);
+          srv_cursor2 = dns_read_be16(p: srv_cursor, out: (_WORD *)srv_record + 337);
+          srv_cursor3 = dns_read_be16(p: srv_cursor2, out: (_WORD *)srv_record + 338);
+          *((_DWORD *)srv_record + 261) = src_name;
+          dns_decode_name(wire_name: srv_cursor3, out_cur: srv_record + 788);
+          ++dns_cache->additional_count;
+          if ( offt == 0 ) ...
+          break;
+        default:
+          goto LABEL_72;
+      }
+      v35 = 5 * offt;
+      offt *= 10;
+      if ( offt >= 0x80000000 ) ...
+      time_now = sub_8B0574A6(a1: v35);
+      dns_cache->expiry = sub_8B0574BC(a1: time_now / 0x64, a2: offt);
+      goto LABEL_72;
+    }
+  }
+  tcpip_unlock(a1: 7u);
+  return 0;
+}
+```
+
+## dns_decode_name out-of-bounds write
+
+`parse_dns` first iterates through the dns cache entries looking for a matching id and destination port. What is interesting is the calls to `dns_decode_name`:
+
+```c
+char *__fastcall dns_decode_name(dns_sublabel *wire_name, _BYTE *out_cur)
+{
+  unsigned int label_len; // r5
+  char *src_cur; // r4
+  _BYTE *label_end; // r6
+
+  label_len = wire_name->len;
+  src_cur = &wire_name->len;
+  if ( wire_name->len != 0 )
+  {
+    while ( 1 )
+    {
+      if ( label_len != 0 )
+        memcpy_unaligned(dst: out_cur, src: ++src_cur, n: label_len);
+      src_cur += label_len;
+      label_end = &out_cur[label_len];
+      label_len = *src_cur;
+      if ( *src_cur == 0 )
+        break;
+      *label_end = '.';
+      out_cur = label_end + 1;
+      if ( *src_cur == 0xC0 )
+      {
+        println(a1: aTcpipDnsFoundC);           // dns found
+        return src_cur;
+      }
+    }
+  }
+  return src_cur;
+}
+```
+
+This is where is happening one of the main vulnerabilitiy, we have full control over `wire_name` and accross the different call-sites, `out_cur` might be a stack or a heap buffer. This function is decoding a domain name, the idea is that the first byte represents the length of the subdomain up to 0xff (the length is encoded on 8 bits) and it will append these subdomains to the decoded buffer, adding a dot between each record. A `0xc0` indicates the end of the name buffer.
+
+It means that we can overflow `out_cur` with the only condition that every 255 (at most) bytes a '.' will be appended. The following name buffer triggers the stack overflow at the very first call of `dns_decode_name`:
+
+```
+BF <191 bytes> FF <255 bytes> 00
+```
+
+During the first call to `dns_decode_name`, `decoded_name` is passed. It is a 256 bytes stack buffer. Which allows an attacker to easily overflow and reach the saved return address and ROP. The other calls to `dns_decode_name` pass a heap buffer: `srv_record`. So it allows cross-object heap out-of-bounds write as well.
+
+## dns_store out-of-bounds write
+
+There are multiple out-of-bounds write in `dns_store` due to the unchecked `rdlength` argument:
+
+```c
+// Stores decoded RR data into a DNS cache entry.
+int __fastcall dns_store(dns_cache_entry_t *entry, dns_rrtype_t rrtype, int *rdata, unsigned int rdlength)
+{
+  dns_store_limits_t wks_count; // r0
+  dns_store_limits_t aaaa_count; // r0
+  int *src_data; // r1
+  dns_addr_len_t copy_len; // r2
+  unsigned __int8 *dst_addr; // r0
+  char *ptr_name; // r0
+  int i; // r5
+  unsigned int txt_len; // r6
+  _BYTE *txt_buf; // r0
+  dns_store_limits_t a_count; // r0
+
+  switch ( rrtype )
+  {
+    case DNS_TYPE_A:
+      a_count = entry->a_count;
+      // [DNS] max 5 A addresses per entry
+      if ( a_count >= DNS_MAX_ADDR_RECORDS )
+        goto LABEL_32;
+      entry->a_count = a_count + 1;
+      copy_len = DNS_A_ADDR_LEN;
+      src_data = rdata;
+      dst_addr = &entry->a_addr[a_count];
+      return memcpy_unaligned_thunk(a1: dst_addr, a2: src_data, a3: copy_len);
+    case DNS_TYPE_WKS:
+      wks_count = entry->a_count;
+      if ( wks_count < DNS_MAX_ADDR_RECORDS )
+      {
+        entry->a_count = wks_count + 1;
+        memcpy_unaligned(dst: &entry->a_addr[wks_count], src: rdata, n: 4u);
+      }
+      entry->wks_data = *(rdata + 4);
+      goto LABEL_32;
+    case DNS_TYPE_PTR:
+      ptr_name = entry->ptr_name;
+      if ( (rdlength - 1) > 0 )
+        // [DNS] UNBOUNDED: rdlength-1 bytes into entry->ptr_name[128], rdlength is packet-controlled
+        memcpy_unaligned(dst: ptr_name, src: (rdata + 1), n: rdlength - 1);
+      i = 0;
+      entry->name[rdlength + 255] = 0;
+      while ( strlen_impl(s: entry->ptr_name) - 1 > i )
+      {
+        if ( entry->ptr_name[i] <= 0x1Fu )
+          entry->ptr_name[i] = 46;
+        ++i;
+      }
+      goto LABEL_32;
+    case DNS_TYPE_TXT:
+      if ( entry->txt_list_ptr == 0 )
+      {
+        entry->txt_list_ptr = dword_8B059F5C + 132;
+        entry->txt_count = 0;
+      }
+      txt_len = *rdata;
+      txt_buf = mem_alloc(a1: txt_len + 1);
+      *(entry->txt_list_ptr + 8 * entry->txt_count + 4) = txt_buf;
+      if ( txt_len != 0 )
+        memcpy_unaligned(dst: txt_buf, src: (rdata + 1), n: txt_len);
+      *(entry->txt_list_ptr + 8 * entry->txt_count) = txt_len + 1;
+      *(*(entry->txt_list_ptr + 8 * entry->txt_count++ + 4) + txt_len) = 0;
+LABEL_32:
+      JUMPOUT(0x8B059CD4);
+    case DNS_TYPE_AAAA:
+      aaaa_count = entry->aaaa_count;
+      if ( aaaa_count >= DNS_MAX_ADDR_RECORDS )
+        goto LABEL_32;
+      entry->aaaa_count = aaaa_count + 1;
+      src_data = rdata;
+      copy_len = DNS_AAAA_ADDR_LEN;
+      dst_addr = entry->aaaa_addr[aaaa_count];
+      return memcpy_unaligned_thunk(a1: dst_addr, a2: src_data, a3: copy_len);
+    default:
+      goto LABEL_32;
+  }
+}
+```
+
+For `DNS_TYPE_PTR` we get a large heap out-of-bounds write which is fully user-controlled. The `strlen_impl` loop replaces the bytes under `0x1F` by dots but we can circumvent this by adding null bytes for the first bytes which will bypass the strlen.
 
 If you have interesting VR projects plz contact me at: `kernelresearch[at]proton.me`.
